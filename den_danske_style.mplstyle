@@ -55,3 +55,11 @@ ytick.major.size: 0
 ytick.major.width: 1
 ytick.minor.size: 0
 ytick.minor.width: .5
+
+savefig.bbox: tight
+
+xaxis_labellocation: right
+yaxis_labellocation: top
+
+figure.dpi:         192
+figure.figsize:     7,6
