@@ -5,7 +5,7 @@ suppressMessages(library(tidyverse))
 
 
 fit_mgarch <- function(length_sample_period, ugarch_model, ugarch_dist_model){
-    in_sample <- read.csv("data/etfs.csv", sep=";")[0:length_sample_period, ] %>% select(-Date)
+    in_sample <- read.csv("data/return_data.csv", sep=";")[0:length_sample_period, ] %>% select(-Date)
     num_assets <- ncol(in_sample)
     
     setwd("/Users/nielseriksen/thesis/")
@@ -24,11 +24,4 @@ fit_mgarch <- function(length_sample_period, ugarch_model, ugarch_dist_model){
     #saveRDS(fit1, "backtesting/fitted_mgarch_model.rds")
     return(list(coef(fit1), residuals(fit1), sigma(fit1)))
     
-}
-
-
-rcov_forecast <- function(){
-    fitted_model <- readRDS("backtesting/fitted_mgarch_model.rds")
-    forecast <- dccforecast(fitted_model, n.ahead=1)
-    return(rcov(forecast, output="matrix"))
 }
