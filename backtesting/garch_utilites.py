@@ -7,7 +7,6 @@ from numpy import dot
 def main_loop(out_of_sample, sigmas, epsilons, Qbar, Q_t, dcca, dccb, o, al, be, mu):
     Omega_ts = []
     p = np.size(sigmas, 1)
-    print(p)
     for t, r_t in enumerate(out_of_sample.values):
         r_t = np.reshape(r_t, (p, 1))
         # 0. Get current sigma^2
@@ -92,7 +91,6 @@ def calculate_Q_t_plus_1(Qbar, dcca, dccb, eta_t, Q_t):
     assert np.size(dcca) == 1
     assert np.size(dccb) == 1
     Q_t_plus_1 = np.array(Qbar*(1-dcca-dccb) + dcca*eta_t*eta_t.T + dccb*Q_t)
-    #print(Q_t_plus_1)
     Q_t_plus_1_s_inv = inv(np.diag(np.diag(Q_t_plus_1)))
     return Q_t_plus_1, Q_t_plus_1_s_inv
 
