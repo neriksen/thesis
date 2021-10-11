@@ -58,8 +58,8 @@ ytick.minor.width: .5
 
 savefig.bbox: tight
 
-xaxis_labellocation: right
-yaxis_labellocation: top
+xaxis.labellocation: right
+yaxis.labellocation: top
 
 figure.dpi:         192
-figure.figsize:     7,6
+
