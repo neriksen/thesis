@@ -11,6 +11,7 @@ import rpy2.robjects as ro
 import sys
 import garch_utilites as gu
 from rpy2.robjects import pandas2ri
+from rpy2.robjects import IntVector
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 pandas2ri.activate()
 
@@ -63,32 +64,53 @@ def split_sample(return_data, length_sample_period):
     return out_of_sample, in_sample
 
 
-def fit_garch_model(length_sample_period, ugarch_model="sGARCH"):
+def fit_garch_model(len_out_of_sample, ugarch_model="sGARCH", garch_order = (1, 1)):
     """
-    ugarch_model: One of "sGARCH", "gjrGARCH", "eGARCH"
+    ugarch_model: One of "sGARCH", "gjrGARCH", not implemented: "eGARCH"
     """
+    assert (ugarch_model in ("sGARCH", "gjrGARCH"))
     # Define the R script and load the instance in Python
     r = ro.r
     r['source']('backtesting/fitting_mgarch.R')
     # Load the function we have defined in R.
     fit_mgarch_r = ro.globalenv['fit_mgarch']
     # Fit the MGARCH model and receive the result
-    ugarch_dist_model = "norm"      # FIXME: Change to "std" when parsing is correct
-    coef, residuals, sigmas = fit_mgarch_r(length_sample_period, ugarch_model, ugarch_dist_model)
+    ugarch_dist_model = "std"       # t-distribution for the individual models
+    coef, residuals, sigmas = fit_mgarch_r(len_out_of_sample, ugarch_model, ugarch_dist_model, garch_order)
     return coef, residuals, sigmas
 
 
-def parse_garch_coef(coef, p):
+def parse_garch_coef(coef, p, model_type):
     """
-    Possible parsings: sGARCH11, sGARCH10, gjrGARCH11, eGARCH11
+    Possible parsings: sGARCH11, sGARCH10, gjrGARCH11, not implemented: eGARCH11
     """
-    # How elegant
-    mu, o, al, be = np.hsplit(coef[:-2].reshape((p, 4)), 4)
-    mu, o, al, be = map(np.ravel, (mu, o, al, be))  # Flattening to 1d array
-    mu, o, al, be = map(np.reshape, (mu, o, al, be), [(p, 1)] * 4)  # Reshaping to px1
-    dcca = coef[-2]
-    dccb = coef[-1]
-    return mu, o, al, be, dcca, dccb
+    assert (model_type in ("sGARCH11", "sGARCH10", "gjrGARCH11"))
+
+    if model_type == "gjrGARCH11": coef_pr_asset = 6
+    elif model_type == "sGARCH11": coef_pr_asset = 5
+    else:                          coef_pr_asset = 4
+
+    garch_params = np.hsplit(coef[:-3].reshape((p, coef_pr_asset)), coef_pr_asset)
+    garch_params = map(np.ravel, garch_params)                              # Flattening to 1d array
+    garch_params = map(np.reshape, garch_params, [(p, 1)] * coef_pr_asset)  # Reshaping to px1
+
+    # Unpacking
+    if model_type == "gjrGARCH11":
+        mu, o, al, be, ka, shape = garch_params
+
+    elif model_type == "sGARCH11":
+        mu, o, al, be, shape = garch_params
+        ka = None
+
+    else:
+        mu, o, al, shape = garch_params
+        be, ka = 0, None
+
+    # Joint parameters
+    dcca = coef[-3]
+    dccb = coef[-2]
+    joint_shape = coef[-1]
+    return mu, o, al, be, ka, shape, dcca, dccb, joint_shape
 
 
 def calc_weights_garch_no_trading_cost(Omega_ts):
@@ -113,10 +135,11 @@ def garch_no_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_
     tickers: ["ticker", "ticker", ..., "ticker"]
     start: "yyyy-m-d"
     end: "yyyy-m-d"
-    model_type: One of "sGARCH11", not implemented = ("sGARCH10", "gjrGARCH11", "eGARCH11")
+    model_type: One of "sGARCH11", "sGARCH10", "gjrGARCH11", not implemented = "eGARCH11"
     """
-    assert (model_type in ["sGARCH11", "sGARCH10", "gjrGARCH11", "eGARCH11"])
+    assert (model_type in ("sGARCH11", "sGARCH10", "gjrGARCH11"))
     garch_type = model_type[:-2]
+    garch_order = IntVector((model_type[-2], model_type[-1]))
     print(f"Calculating weights for:", *tickers)
     return_data = download_return_data(tickers, start, end, True)
 
@@ -127,10 +150,10 @@ def garch_no_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_
     out_of_sample, in_sample = split_sample(return_data, length_sample_period)
 
     # Fit model
-    coef, residuals, sigmas = fit_garch_model(length_sample_period, garch_type)
+    coef, residuals, sigmas = fit_garch_model(length_sample_period, garch_type, garch_order)
 
     # Parse variables
-    mu, o, al, be, dcca, dccb = parse_garch_coef(coef, p)
+    mu, o, al, be, ka, shape, dcca, dccb, joint_shape = parse_garch_coef(coef, p, model_type)
 
     Omega_ts = calc_Omega_ts(out_of_sample, sigmas, residuals, dcca, dccb, o, al, be, mu)
     # Generating weights
@@ -141,6 +164,6 @@ def garch_no_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_
 
 
 if __name__ == '__main__':
-    v_t, out_of_sample, in_sample = garch_no_trading_cost(['IVV', 'HYG'], "2011-1-1", "2019-1-1", 1000)
+    v_t, out_of_sample, in_sample = garch_no_trading_cost(['IVV', 'HYG'], "2011-1-1", "2019-1-1", 1000, "sGARCH10")
     _, performance_table = compare_strategies(v_t, out_of_sample)
     print(performance_table)
