@@ -28,17 +28,17 @@ def main_loop(out_of_sample, sigmas, epsilons, Qbar, Q_t, dcca, dccb, o, al, be,
         # 6. Calculate Q_t_plus_1
         Q_t_plus_1, Q_t_plus_1_s_inv = calculate_Q_t_plus_1(Qbar, dcca, dccb, eta_t, Q_t)
 
-        # 8. Calulate Gamma_t
+        # 7. Calulate Gamma_t
         Gamma_t_plus_1 = calculate_Gamma_t_plus_1(Q_t_plus_1_s_inv, Q_t_plus_1)
 
-        # 9.
+        # 8. Calculate Omega_t+1
         Omega_t_plus_1 = calculate_Omega_t_plus_1(Var_t_plus_1, Gamma_t_plus_1)
 
-        # Storing
+        # Storing Omega_t
         Omega_ts.append(Omega_t_plus_1)
         _sigmas = np.append(sigmas, np.reshape(s_t_squared, (1, p)), axis=0)
 
-        # Iterate on period
+        # Iterate one period
         Q_t = Q_t_plus_1
 
     return Omega_ts
