@@ -12,10 +12,15 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import garch_utilites as gu
 from rpy2.robjects import pandas2ri
+import sys
 pandas2ri.activate()
 
 np.set_printoptions(precision = 3, suppress = True, linewidth = 400)
-os.chdir('/Users/nielseriksen/thesis/')
+
+if sys.platform == "darwin":
+    os.chdir('../')
+else:
+    os.chdir("..\\")
 
 
 def compare_strategies(weights, returns: pd.DataFrame) -> Tuple[pd.DataFrame, Any]:
@@ -123,4 +128,5 @@ def garch_no_trading_cost(tickers: list, start, end, number_of_out_of_sample_day
 
 if __name__ == '__main__':
     v_t, out_of_sample, in_sample = garch_no_trading_cost(['IVV', 'HYG'], "2011-1-1", "2019-1-1", 1000)
-    compare_strategies(v_t, out_of_sample)
+    _, performance_table = compare_strategies(v_t, out_of_sample)
+    print(performance_table)
