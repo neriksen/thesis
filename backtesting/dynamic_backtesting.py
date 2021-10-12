@@ -9,13 +9,11 @@ import yfinance
 import os
 import rpy2.robjects as ro
 import sys
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import garch_utilites as gu
 from rpy2.robjects import pandas2ri
-import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 pandas2ri.activate()
 
-np.set_printoptions(precision = 3, suppress = True, linewidth = 400)
 
 if sys.platform == "darwin":
     os.chdir('../')
@@ -50,11 +48,12 @@ def compare_strategies(weights, returns: pd.DataFrame) -> Tuple[pd.DataFrame, An
     return cum_portfolio_returns, performance_table
 
 
-def prepare_return_data(tickers, start, end):
-    return_data = yfinance.download(tickers, start = start, end= end)['Adj Close']
+def download_return_data(tickers, start="2008-01-01", end="2021-10-02", save_to_csv=True):
+    return_data = yfinance.download(tickers, start=start, end=end)['Adj Close']
     return_data = return_data/return_data.iloc[0]
     return_data = return_data.pct_change().iloc[1:]*100
-    return_data.to_csv("data/return_data.csv", sep=";")
+    if save_to_csv:
+        return_data.to_csv("data/return_data.csv", sep=";")
     return return_data
 
 
@@ -64,15 +63,17 @@ def split_sample(return_data, length_sample_period):
     return out_of_sample, in_sample
 
 
-def fit_garch_model(length_sample_period):
-    # Defining the R script and loading the instance in Python
+def fit_garch_model(length_sample_period, ugarch_model="sGARCH"):
+    """
+    ugarch_model: One of "sGARCH", "gjrGARCH", "eGARCH"
+    """
+    # Define the R script and load the instance in Python
     r = ro.r
     r['source']('backtesting/fitting_mgarch.R')
-    # Loading the function we have defined in R.
+    # Load the function we have defined in R.
     fit_mgarch_r = ro.globalenv['fit_mgarch']
-    # Fitting the mgarch model and receiving the result
-    ugarch_model = "sGARCH"
-    ugarch_dist_model = "norm"
+    # Fit the MGARCH model and receive the result
+    ugarch_dist_model = "norm"      # FIXME: Change to "std" when parsing is correct
     coef, residuals, sigmas = fit_mgarch_r(length_sample_period, ugarch_model, ugarch_dist_model)
     return coef, residuals, sigmas
 
@@ -90,38 +91,51 @@ def parse_garch_coef(coef, p):
     return mu, o, al, be, dcca, dccb
 
 
-def garch_no_trading_cost(tickers: list, start, end, number_of_out_of_sample_days):
+def calc_weights_garch_no_trading_cost(Omega_ts):
+    assert isinstance(Omega_ts, (list, np.ndarray))
+    p = len(Omega_ts[0])
+    ones = np.ones((p, 1))
+    v_t = [np.ravel(divide(dot(inv(Omega), ones), mdot([ones.T, inv(Omega), ones]))) for Omega in Omega_ts]
+    return v_t
+    
+
+def calc_Omega_ts(out_of_sample, in_sample_sigmas, in_sample_residuals, dcca, dccb, o, al, be, mu):
+    Qbar = gu.calculate_Qbar(in_sample_residuals, in_sample_sigmas)
+    Q_t = Qbar      # Qbar is the same as Q_t at the start of the out-of-sample period
+
+    Omega_ts = gu.main_loop(out_of_sample, in_sample_sigmas, in_sample_residuals, Qbar, Q_t, dcca, dccb, o, al, be, mu)
+    return Omega_ts
+
+
+def garch_no_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_of_out_of_sample_days=250*2,
+                          model_type="sGARCH11"):
     """
     tickers: ["ticker", "ticker", ..., "ticker"]
     start: "yyyy-m-d"
     end: "yyyy-m-d"
-    modeltype: One of "sGARCH11", "sGARCH10", "gjrGARCH11", "eGARCH11"
+    model_type: One of "sGARCH11", not implemented = ("sGARCH10", "gjrGARCH11", "eGARCH11")
     """
+    assert (model_type in ["sGARCH11", "sGARCH10", "gjrGARCH11", "eGARCH11"])
+    garch_type = model_type[:-2]
     print(f"Calculating weights for:", *tickers)
-    return_data = prepare_return_data(tickers, start, end)
-    #Receive variables from model
-    asset_names = return_data.columns.values
-    p = len(asset_names)
+    return_data = download_return_data(tickers, start, end, True)
 
-    length_sample_period = len(return_data) - number_of_out_of_sample_days
+    # Determining dimensions
+    T, p = return_data.shape
+
+    length_sample_period = T - number_of_out_of_sample_days
     out_of_sample, in_sample = split_sample(return_data, length_sample_period)
 
     # Fit model
-    coef, residuals, sigmas = fit_garch_model(length_sample_period)
+    coef, residuals, sigmas = fit_garch_model(length_sample_period, garch_type)
 
     # Parse variables
     mu, o, al, be, dcca, dccb = parse_garch_coef(coef, p)
 
-    # 5. Calculate Qbar
-    Qbar = gu.calculate_Qbar(residuals, sigmas)
-    Q_t = Qbar
-
-    Omega_ts = gu.main_loop(out_of_sample, sigmas, residuals, Qbar, Q_t, dcca, dccb, o, al, be, mu)
-
+    Omega_ts = calc_Omega_ts(out_of_sample, sigmas, residuals, dcca, dccb, o, al, be, mu)
     # Generating weights
-    ones = np.ones((p, 1))
-    v_t = [np.ravel(divide(dot(inv(Omega), ones), mdot([ones.T, inv(Omega), ones]))) for Omega in Omega_ts]
-    v_t = pd.DataFrame(v_t, columns=asset_names, index=return_data.index[-len(v_t):])
+    v_t = calc_weights_garch_no_trading_cost(Omega_ts)
+    v_t = pd.DataFrame(v_t, columns=tickers, index=return_data.index[-len(v_t):])
 
     return v_t, out_of_sample, in_sample
 
