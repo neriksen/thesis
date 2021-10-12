@@ -64,7 +64,7 @@ def split_sample(return_data, length_sample_period):
     return out_of_sample, in_sample
 
 
-def fit_garch_model(len_out_of_sample, ugarch_model="sGARCH", garch_order = (1, 1)):
+def fit_garch_model(len_out_of_sample, ugarch_model="sGARCH", garch_order = IntVector((1, 1))):
     """
     ugarch_model: One of "sGARCH", "gjrGARCH", not implemented: "eGARCH"
     """
