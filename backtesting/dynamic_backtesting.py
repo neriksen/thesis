@@ -123,11 +123,11 @@ def calc_weights_garch_no_trading_cost(Omega_ts):
     return v_t
     
 
-def calc_Omega_ts(out_of_sample, in_sample_sigmas, in_sample_residuals, dcca, dccb, o, al, be, mu):
+def calc_Omega_ts(out_of_sample, in_sample_sigmas, in_sample_residuals, dcca, dccb, o, al, be, mu, ka):
     Qbar = gu.calculate_Qbar(in_sample_residuals, in_sample_sigmas)
     Q_t = Qbar      # Qbar is the same as Q_t at the start of the out-of-sample period
 
-    Omega_ts = gu.main_loop(out_of_sample, in_sample_sigmas, in_sample_residuals, Qbar, Q_t, dcca, dccb, o, al, be, mu)
+    Omega_ts = gu.main_loop(out_of_sample, in_sample_sigmas, in_sample_residuals, Qbar, Q_t, dcca, dccb, o, al, be, mu, ka)
     return Omega_ts
 
 
@@ -157,7 +157,7 @@ def garch_no_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_
     # Parse variables
     mu, o, al, be, ka, shape, dcca, dccb, joint_shape = parse_garch_coef(coef, p, model_type)
 
-    Omega_ts = calc_Omega_ts(out_of_sample, sigmas, residuals, dcca, dccb, o, al, be, mu)
+    Omega_ts = calc_Omega_ts(out_of_sample, sigmas, residuals, dcca, dccb, o, al, be, mu, ka)
     # Generating weights
     v_t = calc_weights_garch_no_trading_cost(Omega_ts)
     v_t = pd.DataFrame(v_t, columns=tickers, index=return_data.index[-len(v_t):])
@@ -166,6 +166,6 @@ def garch_no_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_
 
 
 if __name__ == '__main__':
-    v_t, out_of_sample, in_sample = garch_no_trading_cost(['IVV', 'HYG'], "2011-1-1", "2019-1-1", 1000, "sGARCH10")
+    v_t, out_of_sample, in_sample = garch_no_trading_cost(['IVV', 'HYG'], "2011-1-1", "2019-1-1", 1000, "gjrGARCH11")
     _, performance_table = compare_strategies(v_t, out_of_sample)
     print(performance_table)
