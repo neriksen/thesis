@@ -4,8 +4,10 @@ suppressMessages(library(quantmod))
 suppressMessages(library(tidyverse))
 
 
-fit_mgarch <- function(length_sample_period, ugarch_model, ugarch_dist_model, garchOrder){
-    in_sample <- read.csv("data/return_data.csv", sep=";")[0:length_sample_period, ] %>% select(-Date)
+fit_mgarch <- function(len_out_of_sample, ugarch_model, ugarch_dist_model, garchOrder){
+    full_sample <- read.csv("data/return_data.csv", sep=";") %>% select(-Date)
+    len_in_sample <- nrow(full_sample) - len_out_of_sample
+    in_sample <- head(full_sample, len_in_sample)
     num_assets <- ncol(in_sample)
 
     xspec = ugarchspec(mean.model = list(armaOrder = c(0, 0)), variance.model = list(garchOrder = garchOrder, model = ugarch_model), distribution.model = ugarch_dist_model)

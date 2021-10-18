@@ -64,7 +64,7 @@ def split_sample(return_data, length_sample_period):
     return out_of_sample, in_sample
 
 
-def fit_garch_model(len_out_of_sample, ugarch_model="sGARCH", garch_order=(1, 1)):
+def fit_garch_model(len_out_of_sample=0, ugarch_model="sGARCH", garch_order=(1, 1)):
     """
     ugarch_model: One of "sGARCH", "gjrGARCH", not implemented: "eGARCH"
     garch_order: Default: (1, 1)
@@ -84,7 +84,7 @@ def fit_garch_model(len_out_of_sample, ugarch_model="sGARCH", garch_order=(1, 1)
 
 def parse_garch_coef(coef, p, model_type):
     """
-    Possible parsings: sGARCH11, sGARCH10, gjrGARCH11, not implemented: eGARCH11
+    Possible modeltypes: sGARCH11, sGARCH10, gjrGARCH11, not implemented: eGARCH11
     """
     assert (model_type in ("sGARCH11", "sGARCH10", "gjrGARCH11"))
 
@@ -166,6 +166,6 @@ def garch_no_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_
 
 
 if __name__ == '__main__':
-    v_t, out_of_sample, in_sample = garch_no_trading_cost(['IVV', 'HYG'], "2011-1-1", "2019-1-1", 1000, "gjrGARCH11")
+    v_t, out_of_sample, in_sample = garch_no_trading_cost(['IVV', 'EXI', 'EEM'], "2011-1-1", "2021-10-2", 500, "gjrGARCH11")
     _, performance_table = compare_strategies(v_t, out_of_sample)
     print(performance_table)
