@@ -22,24 +22,42 @@ else:
     os.chdir("..\\")
 
 
-def compare_strategies(weights, returns: pd.DataFrame) -> Tuple[pd.DataFrame, Any]:
+def calculate_turnover(weights: pd.DataFrame, returns_pct):
+    returns = returns_pct/100
+    # Defined as TO_{\psi, t} = |v_t-v_{t-1}\circ (1+r_t)|
+    weight_delta = weights.diff(axis=1)
+    TO = weight_delta * (1 + returns)
+
+
+def compare_strategies(weights, returns_pct: pd.DataFrame) -> Tuple[pd.DataFrame, Any]:
+    returns = returns_pct/100
     #weights = v_t
     #returns = out_of_sample
-    portfolio_returns: pd.DataFrame = pd.DataFrame((weights*returns.shift(1)).sum(axis=1)/100,
+    portfolio_returns = pd.DataFrame((weights*returns.shift(1)).sum(axis=1),
                                                    index = returns.index)
     cum_portfolio_returns = pd.DataFrame(portfolio_returns + 1).cumprod()
 
     # Alternative strategies
     # 1/N
-    cum_portfolio_returns['Equal_weight'] = (returns.mean(axis=1)/100 + 1).cumprod()
-    cum_portfolio_returns = pd.DataFrame(cum_portfolio_returns/cum_portfolio_returns.iloc[0])
+    cum_portfolio_returns['Equal_weight'] = (returns.mean(axis=1) + 1).cumprod()
 
-    # Buy and hold 1/N
-    #cum_portfolio_returns['Equal_weight_buy_n_hold'] = (returns.mean(axis=1) / 100 + 1).cumprod()
+    # Buy and hold 1/N (BnH)
+    # Since turnover = |v_t - v_{t-1}*(1+r_t)|, then v_{t-1} = v_t/(1+r_t) when aiming for turnover = 0.
+    p = weights.shape[1]
+    BnH_weights = np.full((1, p), 1/p)
+    for _, _return in (returns + 1).shift(1).iloc[1:].iterrows():
+        _return = np.reshape(_return.values, (1, p))
+        next_weight = BnH_weights[-1]*_return
+        next_weight = next_weight/np.sum(next_weight)
+        BnH_weights = np.append(BnH_weights, next_weight, 0)
+
+    cum_portfolio_returns['BnH'] = ((BnH_weights * (returns.shift(1))).mean(axis=1)+1).cumprod()
+    cum_portfolio_returns['BnH'].iloc[0] = 1
     # Formatting
-    cum_portfolio_returns.columns = ["GARCH no trading costs", "Equal weight"]
+    cum_portfolio_returns.columns = ["GARCH no trading costs", "Equal weight", "BnH"]
 
     # Calculate std
+    cum_portfolio_returns = pd.DataFrame(cum_portfolio_returns / cum_portfolio_returns.iloc[0])
     std = cum_portfolio_returns.pct_change().std()*np.sqrt(250)
     mean_return = cum_portfolio_returns.pct_change().mean() * 250
     sharpe = mean_return/std
