@@ -71,6 +71,7 @@ def download_return_data(tickers, start="2008-01-01", end="2021-10-02", save_to_
     return_data = yfinance.download(tickers, start=start, end=end)['Adj Close']
     return_data = return_data/return_data.iloc[0]
     return_data = return_data.pct_change().iloc[1:]*100
+    return_data = return_data[tickers]
     if save_to_csv:
         return_data.to_csv("data/return_data.csv", sep=";")
     return return_data
