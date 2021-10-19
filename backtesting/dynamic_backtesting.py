@@ -22,7 +22,7 @@ else:
     os.chdir("..\\")
 
 
-def calculate_turnover(weights: pd.DataFrame, returns_pct):
+def calc_turnover(weights: pd.DataFrame, returns_pct):
     returns = returns_pct/100
     # Defined as TO_{\psi, t} = |v_t-v_{t-1}\circ (1+r_t)|
     weight_delta = weights.diff(axis=1)
@@ -124,13 +124,27 @@ def parse_garch_coef(coef, p, model_type):
 
     else:
         mu, o, al, shape = garch_params
-        be, ka = 0, None
+        be = np.zeros(mu.shape)
+        ka = None
 
     # Joint parameters
     dcca = coef[-3]
     dccb = coef[-2]
     joint_shape = coef[-1]
-    return mu, o, al, be, ka, shape, dcca, dccb, joint_shape
+
+    params_dict = {
+        "mu": mu,
+        "omega": o,
+        "alpha": al,
+        "beta": be,
+        "kappa": ka,
+        "dcca": dcca,
+        "dccb": dccb,
+        "shape": shape,
+        "joint_shape": joint_shape
+    }
+
+    return params_dict
 
 
 def calc_weights_garch_no_trading_cost(Omega_ts):
@@ -141,11 +155,11 @@ def calc_weights_garch_no_trading_cost(Omega_ts):
     return v_t
     
 
-def calc_Omega_ts(out_of_sample, in_sample_sigmas, in_sample_residuals, dcca, dccb, o, al, be, mu, ka):
-    Qbar = gu.calculate_Qbar(in_sample_residuals, in_sample_sigmas)
+def calc_Omega_ts(out_of_sample, in_sample_sigmas, in_sample_residuals, **kw):
+    Qbar = gu.calc_Qbar(in_sample_residuals, in_sample_sigmas)
     Q_t = Qbar      # Qbar is the same as Q_t at the start of the out-of-sample period
 
-    Omega_ts = gu.main_loop(out_of_sample, in_sample_sigmas, in_sample_residuals, Qbar, Q_t, dcca, dccb, o, al, be, mu, ka)
+    Omega_ts = gu.main_loop(out_of_sample, in_sample_sigmas, in_sample_residuals, Qbar, Q_t, **kw)
     return Omega_ts
 
 
@@ -173,9 +187,9 @@ def garch_no_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_
     coef, residuals, sigmas = fit_garch_model(length_sample_period, garch_type, garch_order)
 
     # Parse variables
-    mu, o, al, be, ka, shape, dcca, dccb, joint_shape = parse_garch_coef(coef, p, model_type)
+    params_dict = parse_garch_coef(coef, p, model_type)
 
-    Omega_ts = calc_Omega_ts(out_of_sample, sigmas, residuals, dcca, dccb, o, al, be, mu, ka)
+    Omega_ts = calc_Omega_ts(out_of_sample, sigmas, residuals, **params_dict)
     # Generating weights
     v_t = calc_weights_garch_no_trading_cost(Omega_ts)
     v_t = pd.DataFrame(v_t, columns=tickers, index=return_data.index[-len(v_t):])
