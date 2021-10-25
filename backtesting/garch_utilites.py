@@ -11,7 +11,7 @@ def main_loop(out_of_sample_returns, sigmas, epsilons, Qbar, Q_t, **kw):
     Omega_ts = []
     p = np.size(sigmas, 1)
 
-    # For t = T to M, where T is first in-sample period
+    # For t = T to M, where T is last in-sample period
     # t period values are always known
     # t+1 period values are always forecasted
 
@@ -30,13 +30,14 @@ def main_loop(out_of_sample_returns, sigmas, epsilons, Qbar, Q_t, **kw):
         Var_t_plus_1, Var_t_plus_1_inv = calc_Var_t(s_t_Sq_plus_1)
 
         # 6. Calculate Q_(t+1)
-        Q_t_plus_1, Q_t_plus_1_s_inv = calc_Q_t_plus_1(Qbar=Qbar, Q_t=Q_t, eta_t=eta_t, **kw)
+        Q_t_plus_1 = calc_Q_t_plus_1(Qbar=Qbar, Q_t=Q_t, eta_t=eta_t, **kw)
 
         # 7. Calulate Gamma_t
-        Gamma_t_plus_1 = calc_Gamma_t_plus_1(Q_t_plus_1_s_inv=Q_t_plus_1_s_inv, Q_t_plus_1=Q_t_plus_1)
+        Gamma_t_plus_1 = calc_Gamma_t_plus_1(Q_t_plus_1=Q_t_plus_1)
 
         # 8. Calculate Omega_(t+1)
         Omega_t_plus_1 = calc_Omega_t_plus_1(Var_t_plus_1=Var_t_plus_1, Gamma_t_plus_1=Gamma_t_plus_1)
+        assert np.allclose(np.diag(Omega_t_plus_1), np.ravel(s_t_Sq_plus_1), rtol=1e-3)
 
         # Storing Omega_t and sigmas
         Omega_ts.append(Omega_t_plus_1)
@@ -71,7 +72,7 @@ def calc_Qbar(epsilons, sigmas):
     p = np.size(epsilons, 1)
     for i, (epsilon_t, sigma_t) in enumerate(zip(epsilons, sigmas)):
         epsilon_t = np.reshape(epsilon_t, (p, 1))
-        Var_t, Var_t_inv = inv(calc_Var_t(sigma_t))
+        Var_t, Var_t_inv = calc_Var_t(sigma_t)
         eta_dot = dot(Var_t_inv, epsilon_t).T
         eta[i] = eta_dot
 
@@ -110,19 +111,20 @@ def calc_sigma(e_Sq, s_Sq, e=None, **kw):
 
 
 def calc_Var_t(s_t_Sq):
-    Var_t = np.diag(np.ravel(s_t_Sq))
+    Var_t = np.diag(np.ravel(np.sqrt(s_t_Sq)))
     Var_t_inv = inv(Var_t)
     return Var_t, Var_t_inv
 
 
 def calc_Q_t_plus_1(Qbar, Q_t, eta_t, **kw):
-    Q_t_plus_1 = np.array(Qbar * (1 - kw['dcca'] - kw['dccb']) + kw['dcca'] * eta_t * eta_t.T + kw['dccb'] * Q_t)
-    Q_t_plus_1_inv = inv(np.diag(np.diag(Q_t_plus_1)))
-    return Q_t_plus_1, Q_t_plus_1_inv
+    Q_t_plus_1 = np.array(Qbar * (1 - kw['dcca'] - kw['dccb']) + kw['dcca'] * dot(eta_t, eta_t.T) + kw['dccb'] * Q_t)
+    return Q_t_plus_1
 
 
-def calc_Gamma_t_plus_1(Q_t_plus_1_s_inv, Q_t_plus_1):
-    Gamma_t_plus_1 = mdot([Q_t_plus_1_s_inv, Q_t_plus_1, Q_t_plus_1_s_inv])
+def calc_Gamma_t_plus_1(Q_t_plus_1):
+    Q_t_plus_1_diag_inv = inv(np.sqrt(np.diag(np.diag(Q_t_plus_1))))     # Tak til Bongen
+    Gamma_t_plus_1 = mdot([Q_t_plus_1_diag_inv, Q_t_plus_1, Q_t_plus_1_diag_inv])
+    assert np.allclose(np.diag(Gamma_t_plus_1), np.ones(np.diag(Gamma_t_plus_1).shape))
     return Gamma_t_plus_1
 
 
