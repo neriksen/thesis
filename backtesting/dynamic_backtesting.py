@@ -24,9 +24,11 @@ else:
 
 def calc_turnover(weights: pd.DataFrame, returns_pct):
     returns = returns_pct/100
-    # Defined as TO_{\psi, t} = |v_t-v_{t-1}\circ (1+r_t)|
-    weight_delta = weights.diff(axis=1)
-    TO = weight_delta * (1 + returns)
+    # Defined as TO_{\psi, t} = |v_t-(v_{t-1}*(1+r_t)/(1+v_{t-1}'*r_t))|
+    #weight_delta = weights.diff(axis=1)
+    #for v_t in weight_delta.iterrows():
+
+    #TO = weight_delta * (1 + returns)
 
 
 def compare_strategies(weights, returns_pct: pd.DataFrame) -> Tuple[pd.DataFrame, Any]:
@@ -160,7 +162,8 @@ def calc_Omega_ts(out_of_sample_returns, in_sample_sigmas, in_sample_residuals, 
     Qbar = gu.calc_Qbar(in_sample_residuals, in_sample_sigmas)
     Q_t = Qbar      # Qbar is the same as Q_t at the start of the out-of-sample period
 
-    Omega_ts = gu.main_loop(out_of_sample_returns, in_sample_sigmas, in_sample_residuals, Qbar, Q_t, **kw)
+    Omega_ts = gu.main_loop(out_of_sample_returns=out_of_sample_returns,
+                        sigmas=in_sample_sigmas, epsilons=in_sample_residuals, Qbar = Qbar, Q_t = Q_t, **kw)
     return Omega_ts
 
 
@@ -200,6 +203,7 @@ def garch_no_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_
 
 
 if __name__ == '__main__':
-    v_t, out_of_sample, in_sample = garch_no_trading_cost(['IVV', 'EXI', 'EEM'], "2011-1-1", "2021-10-2", 1000, "sGARCH10")
+    v_t, out_of_sample, in_sample = garch_no_trading_cost(['EEM', 'IVV', 'IEV', 'IXN', 'IYR', 'IXG', 'EXI', 'GC=F', 'BZ=F', 'HYG', 'TLT'],
+                                                          number_of_out_of_sample_days=0, model_type="sGARCH10")
     _, performance_table = compare_strategies(v_t, out_of_sample)
     print(performance_table)
