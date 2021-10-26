@@ -22,48 +22,77 @@ else:
     os.chdir("..\\")
 
 
-def calc_turnover(weights: pd.DataFrame, returns_pct):
-    returns = returns_pct/100
-    #weight_delta = weights.diff(axis=1)
-    #for v_t in weight_delta.iterrows():
-
-    #TO = weight_delta * (1 + returns)
+def Lambda(Omega, gamma_D):
+    return np.multiply(Omega, gamma_D)
 
 
-def compare_strategies(weights, returns_pct: pd.DataFrame) -> Tuple[pd.DataFrame, Any]:
+def calc_turnover(v_t, v_t_1, r_t):
+    TO = np.abs(v_t - np.divide(np.multiply(v_t_1, 1+r_t), 1+dot(v_t_1.T, r_t)))
+    return TO
+
+
+def calc_transaction_costs(weights: pd.DataFrame, returns, Omega_ts):
+    gamma_D = 2.24e-05      # Median of gamma_D in data/avg_volume.csv
+    TC = np.zeros((len(weights)))
+    for t, (v_t, v_t_1, Omega_t, r_t) in enumerate(zip(weights.iterrows(), weights.shift(1).iterrows(),
+                                                       Omega_ts, returns.shift(1).iterrows())):
+        v_t, v_t_1, r_t = v_t[1].values, v_t_1[1].values, r_t[1].values
+        if t >= 1:   # Only measureable from period t = 2, however Python is base 0 so t >= 2 becomes t >= 1
+            Lambda_t = Lambda(Omega_t, gamma_D)
+            TO = calc_turnover(v_t, v_t_1, r_t)
+            TC[t] = mdot([TO.T, Lambda_t, TO])
+    return TC
+
+
+def compare_strategies(weights, returns_pct: pd.DataFrame, Omega_ts) -> Tuple[pd.DataFrame, Any]:
     """
     Function assumes weights start in period t-1 and returns_pct start in period t
     """
+    p = weights.shape[1]
 
     # GARCH return
     returns = returns_pct.divide(100)
-    portfolio_returns = weights.multiply(returns).sum(axis=1)
-    cum_portfolio_returns = portfolio_returns.add(1).cumprod().to_frame()
+    portfolio_returns = weights.multiply(returns).sum(axis=1).to_frame()
+    portfolio_returns.columns = ['GARCH']
 
+    # Calculate returns net transaction costs
+    TC_garch = calc_transaction_costs(weights, returns, Omega_ts)
+    portfolio_returns['GARCH TC'] = portfolio_returns['GARCH']-TC_garch
+
+    cum_portfolio_returns = portfolio_returns.add(1).cumprod()
+    TC_Equal_weight = calc_transaction_costs(pd.DataFrame(np.full(weights.shape, (1/p))), returns, Omega_ts)
     # 1/N return
     cum_portfolio_returns['Equal_weight'] = returns.mean(axis=1).add(1).cumprod()
+    cum_portfolio_returns['Equal_weight TC'] = returns.mean(axis=1).sub(TC_Equal_weight).add(1).cumprod()
 
-    # Buy and hold 1/N (BnH)
+
+    # Buy and hold GARCH firs (BnH)
     # Since turnover = |v_t - v_{t-1}*(1+r_t)|, then v_{t-1} = v_t/(1+r_t) when aiming for turnover = 0.
-    p = weights.shape[1]
+
     BnH_weights = []
-    for t, (_, _return) in enumerate(returns.add(1).iterrows()):
+    for t, (_, _return) in enumerate(returns.shift(1).add(1).iterrows()):
         if t == 0:
             BnH_weights.append(weights.iloc[0].values)
         else:
-            _return = np.reshape(_return.values, (1, p))
-            next_weight = BnH_weights[-1]*_return
-            next_weight = next_weight/np.sum(next_weight)
+            _return = np.reshape(_return.values, (p, 1))
+            v_t_1 = np.reshape(BnH_weights[-1], (p, 1))
+            next_weight = np.divide(np.multiply(v_t_1, (1+_return)), 1+dot(v_t_1.T, _return))
             BnH_weights.append(np.ravel(next_weight))
 
+    TC_BnH = calc_transaction_costs(pd.DataFrame(BnH_weights), returns, Omega_ts)
     BnH_weights = np.array(BnH_weights)
-    cum_portfolio_returns['BnH'] = np.multiply(BnH_weights, returns).sum(axis=1).add(1).cumprod()
+    BnH_returns = np.multiply(BnH_weights, returns).sum(axis=1)
+    cum_portfolio_returns['BnH'] = BnH_returns.add(1).cumprod()
+    cum_portfolio_returns['BnH TC'] = BnH_returns.sub(TC_BnH).add(1).cumprod()
+
     # Formatting
-    cum_portfolio_returns.columns = ["GARCH no trading costs", "Equal weight", "BnH"]
+    #cum_portfolio_returns.columns = ["GARCH", "GARCH TC", "Equal weight", "BnH"]
 
     # Normalize returns to begin at 1
     cum_portfolio_returns = cum_portfolio_returns.divide(cum_portfolio_returns.iloc[0])
     cum_portfolio_returns.index = pd.to_datetime(cum_portfolio_returns.index)
+
+
 
     # Calculate aggregate performance measures
     std = cum_portfolio_returns.pct_change().std()*np.sqrt(250)
