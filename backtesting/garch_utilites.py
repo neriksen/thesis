@@ -1,21 +1,29 @@
 import numpy as np
+import pandas as pd
 from numpy.linalg import inv
 from numpy.linalg import multi_dot as mdot
 from numpy import dot
 
 
-def main_loop(out_of_sample_returns, sigmas, epsilons, Qbar, Q_t, **kw):
+def main_loop(out_of_sample_returns, in_sample_returns, sigmas, epsilons, Qbar, Q_t, **kw):
     initial_value_check(out_of_sample_returns, sigmas, epsilons, Qbar, Q_t, **kw)
-    if kw['kappa'] is not None:  # Model is gjrGARCH11
+    if kw['kappa'] is not None:
         print('gjrGARCH11 detected')
     Omega_ts = []
     p = np.size(sigmas, 1)
+    periods_to_run = len(out_of_sample_returns)-1
 
     # For t = T to M, where T is last in-sample period
     # t period values are always known
     # t+1 period values are always forecasted
+    # We add last period of the in-sample returns to the out-of-sample returns, to start the process
+    last_in_sample = in_sample_returns.iloc[-1]
+    returns = out_of_sample_returns.append(last_in_sample)\
+        .sort_index()
 
-    for t, r_t in enumerate(out_of_sample_returns.values):
+    # First Omega forecast saved is Omega_{t+1|t}
+
+    for t, r_t in enumerate(returns.values):
         r_t = np.reshape(r_t, (p, 1))
 
         # Get variables from current period for all N assets
@@ -45,6 +53,9 @@ def main_loop(out_of_sample_returns, sigmas, epsilons, Qbar, Q_t, **kw):
 
         # Iterate one period
         Q_t = Q_t_plus_1
+
+        if t == periods_to_run:     # Quit one period before loop runs out. No reason to calc Omega_t+1 for last return
+            break
 
     return Omega_ts
 
