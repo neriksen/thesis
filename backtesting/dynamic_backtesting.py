@@ -24,7 +24,6 @@ else:
 
 def calc_turnover(weights: pd.DataFrame, returns_pct):
     returns = returns_pct/100
-    # Defined as TO_{\psi, t} = |v_t-(v_{t-1}*(1+r_t)/(1+v_{t-1}'*r_t))|
     #weight_delta = weights.diff(axis=1)
     #for v_t in weight_delta.iterrows():
 
@@ -32,37 +31,44 @@ def calc_turnover(weights: pd.DataFrame, returns_pct):
 
 
 def compare_strategies(weights, returns_pct: pd.DataFrame) -> Tuple[pd.DataFrame, Any]:
-    returns = returns_pct/100
-    #weights = v_t
-    #returns = out_of_sample
-    portfolio_returns = pd.DataFrame((weights*returns.shift(1)).sum(axis=1),
-                                                   index = returns.index)
-    cum_portfolio_returns = pd.DataFrame(portfolio_returns + 1).cumprod()
+    """
+    Function assumes weights start in period t-1 and returns_pct start in period t
+    """
 
-    # Alternative strategies
-    # 1/N
-    cum_portfolio_returns['Equal_weight'] = (returns.mean(axis=1) + 1).cumprod()
+    # GARCH return
+    returns = returns_pct.divide(100)
+    portfolio_returns = weights.multiply(returns).sum(axis=1)
+    cum_portfolio_returns = portfolio_returns.add(1).cumprod().to_frame()
+
+    # 1/N return
+    cum_portfolio_returns['Equal_weight'] = returns.mean(axis=1).add(1).cumprod()
 
     # Buy and hold 1/N (BnH)
     # Since turnover = |v_t - v_{t-1}*(1+r_t)|, then v_{t-1} = v_t/(1+r_t) when aiming for turnover = 0.
     p = weights.shape[1]
-    BnH_weights = np.full((1, p), 1/p)
-    for _, _return in (returns + 1).shift(1).iloc[1:].iterrows():
-        _return = np.reshape(_return.values, (1, p))
-        next_weight = BnH_weights[-1]*_return
-        next_weight = next_weight/np.sum(next_weight)
-        BnH_weights = np.append(BnH_weights, next_weight, 0)
+    BnH_weights = []
+    for t, (_, _return) in enumerate(returns.add(1).iterrows()):
+        if t == 0:
+            BnH_weights.append(weights.iloc[0].values)
+        else:
+            _return = np.reshape(_return.values, (1, p))
+            next_weight = BnH_weights[-1]*_return
+            next_weight = next_weight/np.sum(next_weight)
+            BnH_weights.append(np.ravel(next_weight))
 
-    cum_portfolio_returns['BnH'] = ((BnH_weights * (returns.shift(1))).mean(axis=1)+1).cumprod()
-    cum_portfolio_returns['BnH'].iloc[0] = 1
+    BnH_weights = np.array(BnH_weights)
+    cum_portfolio_returns['BnH'] = np.multiply(BnH_weights, returns).sum(axis=1).add(1).cumprod()
     # Formatting
     cum_portfolio_returns.columns = ["GARCH no trading costs", "Equal weight", "BnH"]
 
-    # Calculate std
-    cum_portfolio_returns = pd.DataFrame(cum_portfolio_returns / cum_portfolio_returns.iloc[0])
+    # Normalize returns to begin at 1
+    cum_portfolio_returns = cum_portfolio_returns.divide(cum_portfolio_returns.iloc[0])
+    cum_portfolio_returns.index = pd.to_datetime(cum_portfolio_returns.index)
+
+    # Calculate aggregate performance measures
     std = cum_portfolio_returns.pct_change().std()*np.sqrt(250)
     mean_return = cum_portfolio_returns.pct_change().mean() * 250
-    sharpe = mean_return/std
+    sharpe = mean_return.divide(std)
 
     performance_table = pd.DataFrame([std, mean_return, sharpe]).transpose()
     performance_table.columns = ["Ann. standard deviation", "Ann. return", "Ann. Sharpe ratio"]
@@ -158,11 +164,11 @@ def calc_weights_garch_no_trading_cost(Omega_ts):
     return v_t
     
 
-def calc_Omega_ts(out_of_sample_returns, in_sample_sigmas, in_sample_residuals, **kw):
+def calc_Omega_ts(out_of_sample_returns, in_sample_returns, in_sample_sigmas, in_sample_residuals, **kw):
     Qbar = gu.calc_Qbar(in_sample_residuals, in_sample_sigmas)
     Q_t = Qbar      # Qbar is the same as Q_t at the start of the out-of-sample period
 
-    Omega_ts = gu.main_loop(out_of_sample_returns=out_of_sample_returns,
+    Omega_ts = gu.main_loop(out_of_sample_returns=out_of_sample_returns, in_sample_returns = in_sample_returns,
                         sigmas=in_sample_sigmas, epsilons=in_sample_residuals, Qbar = Qbar, Q_t = Q_t, **kw)
     return Omega_ts
 
@@ -193,8 +199,8 @@ def garch_no_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_
     # Parse variables
     params_dict = parse_garch_coef(coef=coef, p=p, model_type=model_type)
 
-    Omega_ts = calc_Omega_ts(out_of_sample_returns=out_of_sample, in_sample_sigmas=sigmas,
-                             in_sample_residuals=residuals, **params_dict)
+    Omega_ts = calc_Omega_ts(out_of_sample_returns=out_of_sample, in_sample_returns=in_sample,
+                             in_sample_sigmas=sigmas, in_sample_residuals=residuals, **params_dict)
     # Generating weights
     v_t = calc_weights_garch_no_trading_cost(Omega_ts)
     v_t = pd.DataFrame(v_t, columns=tickers, index=return_data.index[-len(v_t):])
