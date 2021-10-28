@@ -4,22 +4,25 @@ from numpy import divide
 from numpy.linalg import multi_dot as mdot
 from numpy.linalg import inv
 from numpy import dot
+import matplotlib.pyplot as plt
 import pandas as pd
 import yfinance
 import os
 import rpy2.robjects as ro
 import sys
-import garch_utilites as gu
 from rpy2.robjects import pandas2ri
 from rpy2.robjects import IntVector
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 pandas2ri.activate()
 
-
 if sys.platform == "darwin":
     os.chdir('../')
+    sys.path.append("backtesting/utils")
 else:
     os.chdir("..\\")
+    sys.path.append("backtesting\\utils")
+
+import garch_utilites as gu
 
 
 def Lambda(Omega, gamma_D):
@@ -91,7 +94,6 @@ def compare_strategies(weights, returns_pct: pd.DataFrame, Omega_ts) -> Tuple[pd
     # Normalize returns to begin at 1
     cum_portfolio_returns = cum_portfolio_returns.divide(cum_portfolio_returns.iloc[0])
     cum_portfolio_returns.index = pd.to_datetime(cum_portfolio_returns.index)
-
 
 
     # Calculate aggregate performance measures
@@ -234,7 +236,7 @@ def garch_no_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_
     v_t = calc_weights_garch_no_trading_cost(Omega_ts)
     v_t = pd.DataFrame(v_t, columns=tickers, index=return_data.index[-len(v_t):])
 
-    return v_t, out_of_sample, in_sample
+    return v_t, out_of_sample, in_sample, Omega_ts
 
 
 if __name__ == '__main__':
