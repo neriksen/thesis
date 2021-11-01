@@ -12,6 +12,7 @@ import rpy2.robjects as ro
 import sys
 from rpy2.robjects import pandas2ri
 from rpy2.robjects import IntVector
+import calibrate_trading_costs
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 pandas2ri.activate()
 
@@ -29,21 +30,35 @@ def Lambda(Omega, gamma_D):
     return np.multiply(Omega, gamma_D)
 
 
-def calc_turnover(v_t, v_t_1, r_t):
+def calc_turnover_pct(v_t, v_t_1, r_t):
     TO = np.abs(v_t - np.divide(np.multiply(v_t_1, 1+r_t), 1+dot(v_t_1.T, r_t)))
     return TO
 
 
 def calc_transaction_costs(weights: pd.DataFrame, returns, Omega_ts):
-    gamma_D = 2.24e-05      # Median of gamma_D in data/avg_volume.csv
+    gamma_D = 8.471737930382345e-05     # Median of gamma_D in data/avg_volume.csv porfolio value 1e8
+    # gamma_D = 0.0005520316111414786     # Mean of gamma_D in data/avg_volume.csv porfolio value 1e8
+    # gamma_D = 0.005520315335166648     # Mean of gamma_D in data/avg_volume.csv porfolio value 1e9
+    # gamma_D = 0.0008471730344743024    # Median of gamma_D in data/avg_volume.csv porfolio value 1e9
+
+    portfolio_value = 1e8,
     TC = np.zeros((len(weights)))
+    avg_volume = calibrate_trading_costs.asset_lookup(list(returns.columns), col_lookup="Avg volume")
+    avg_price = calibrate_trading_costs.asset_lookup(list(returns.columns), col_lookup="Avg price")
     for t, (v_t, v_t_1, Omega_t, r_t) in enumerate(zip(weights.iterrows(), weights.shift(1).iterrows(),
                                                        Omega_ts, returns.shift(1).iterrows())):
         v_t, v_t_1, r_t = v_t[1].values, v_t_1[1].values, r_t[1].values
         if t >= 1:   # Only measureable from period t = 2, however Python is base 0 so t >= 2 becomes t >= 1
+
+            TO = calc_turnover_pct(v_t, v_t_1, r_t)
+            positions_dollar = portfolio_value*v_t
+            amount_traded = np.reshape(positions_dollar * TO, avg_volume.shape)/avg_price
             Lambda_t = Lambda(Omega_t, gamma_D)
-            TO = calc_turnover(v_t, v_t_1, r_t)
-            TC[t] = mdot([TO.T, Lambda_t, TO])
+            relative_loss = mdot([amount_traded.T, Lambda_t, amount_traded])/portfolio_value  # Divide by port value to get relative loss
+            TC[t] = relative_loss
+            portfolio_return = (1+dot(v_t.T, r_t)-relative_loss)
+            portfolio_value *= portfolio_return
+
     return TC
 
 
