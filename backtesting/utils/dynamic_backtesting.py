@@ -255,7 +255,16 @@ def garch_no_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_
 
 
 if __name__ == '__main__':
-    v_t, out_of_sample, in_sample = garch_no_trading_cost(['EEM', 'IVV', 'IEV', 'IXN', 'IYR', 'IXG', 'EXI', 'GC=F', 'BZ=F', 'HYG', 'TLT'],
-                                                          number_of_out_of_sample_days=0, model_type="sGARCH10")
-    _, performance_table = compare_strategies(v_t, out_of_sample)
+    v_t, out_of_sample, in_sample, Omega_ts = garch_no_trading_cost(['IVV', 'TLT', 'EEM'],
+                                                          number_of_out_of_sample_days=1000, model_type="gjrGARCH11")
+    # v_t.to_csv('v_t.csv')
+    # out_of_sample.to_csv('out_of_sample.csv')
+    # in_sample.to_csv('in_sample.csv')
+    # v_t = pd.read_csv('v_t.csv', index_col=0)
+    # out_of_sample = pd.read_csv('out_of_sample.csv', index_col=0)
+    # in_sample = pd.read_csv('in_sample.csv', index_col=0)
+
+    cum_returns, performance_table = compare_strategies(v_t, out_of_sample, Omega_ts)
     print(performance_table)
+    plt.plot(cum_returns)
+    plt.show()
