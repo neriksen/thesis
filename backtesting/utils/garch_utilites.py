@@ -3,6 +3,7 @@ import pandas as pd
 from numpy.linalg import inv
 from numpy.linalg import multi_dot as mdot
 from numpy import dot
+from scipy.optimize import minimize
 
 
 def main_loop(out_of_sample_returns, in_sample_returns, sigmas, epsilons, Qbar, Q_t, **kw):
@@ -142,3 +143,62 @@ def calc_Gamma_t_plus_1(Q_t_plus_1):
 def calc_Omega_t_plus_1(Var_t_plus_1, Gamma_t_plus_1):
     Omega_t_plus_1 = mdot([Var_t_plus_1, Gamma_t_plus_1, Var_t_plus_1])
     return Omega_t_plus_1
+
+
+def calc_Avs(Omega_t, gamma_D, Avv_guess):
+    # FIXME: Omega_t AND Omega_t_plus_1
+    # Setup
+    global Lambda_t, rho, ones, p
+    rho = 1 - np.exp(-0.02 / 260)
+    Lambda_t = (gamma_D * Omega_t) / (1 - rho)
+    p = Omega_t.shape[0]
+    ones = np.ones((p, 1))
+    Avv = calc_Avv(Omega_t, Avv_guess)
+    Av1 = calc_Av1()
+    return Avv, Av1
+
+
+def calc_Av1():
+    fraction = np.divide(2 * dot(Lambda_t, J_t_inv), mdot([ones.T, J_t_inv, ones]))
+    big_parenthesis = inv((1 - rho) ** (-1) - 2 * dot(Lambda_t, J_t_inv) - mdot([fraction, ones, ones.T, J_t_inv]))
+    Av1 = dot(big_parenthesis, fraction)
+    return Av1
+
+
+def calc_Avv(Omega_t, Avv_guess):
+    if Avv_guess is None:
+        Avv_guess = np.full((p, p), 1/p)
+    # Numerical solver for Avv
+    options = {"maxiter": 4000, "ftol": 11e-13}
+    res =minimize(fun = compare_sides,
+                  args=(Omega_t),
+            method = 'SLSQP',
+            x0=Avv_guess,
+            options = options,
+            tol = 1e-13)
+
+    Avv = np.reshape(res.x, (p, p))
+    Avv = np.triu(Avv)
+    Avv = Avv.T + Avv - np.diag(np.diag(Avv))
+    return Avv
+
+
+def compare_sides(Avv, Omega_t):
+    global J_t_inv
+    Avv = np.reshape(Avv, (p, p))
+    Avv = np.triu(Avv)
+    Avv = Avv.T + Avv - np.diag(np.diag(Avv))    # Enforcing a diagonal
+    J_t_inv = inv(Omega_t + Avv + Lambda_t)
+    Left = LHS(Avv)
+    Right = RHS()
+    diff = np.abs(Left-Right)**2
+    return np.sum(diff)
+
+
+def LHS(Avv):
+    Avv = np.reshape(Avv, (p, p))
+    return (1/(1-rho))*Avv
+
+
+def RHS():
+    return mdot([Lambda_t, J_t_inv, ones, 1/(mdot([ones.T, J_t_inv, ones])), ones.T, J_t_inv, Lambda_t])-mdot([Lambda_t, J_t_inv, Lambda_t]) - Lambda_t
