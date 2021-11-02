@@ -15,6 +15,15 @@ def calc_turnover_pct(v_t, v_t_1, r_t):
     return TO
 
 
+def clean_up_returns(series: pd.Series):
+    tmp = series.copy()
+    for t, gross_return in enumerate(series):
+        if gross_return <= 0:
+            tmp[t:] = np.nan
+            break
+    return tmp
+
+
 def calc_transaction_costs(weights: pd.DataFrame, returns, Omega_ts):
     gamma_D = 8.471737930382345e-05     # Median of gamma_D in data/avg_volume.csv porfolio value 1e8
     # gamma_D = 0.0005520316111414786     # Mean of gamma_D in data/avg_volume.csv porfolio value 1e8
@@ -90,6 +99,8 @@ def performance_table(weights, returns_pct: pd.DataFrame, Omega_ts) -> Tuple[pd.
     cum_portfolio_returns = cum_portfolio_returns.divide(cum_portfolio_returns.iloc[0])
     cum_portfolio_returns.index = pd.to_datetime(cum_portfolio_returns.index)
 
+    # Clean up returns to ensure they end i gross returns hit 0
+    cum_portfolio_returns = cum_portfolio_returns.apply(clean_up_returns, axis=0)
 
     # Calculate aggregate performance measures
     std = cum_portfolio_returns.pct_change().std()*np.sqrt(250)
