@@ -2,10 +2,12 @@ suppressMessages(library(rmgarch))
 suppressMessages(library(parallel))
 suppressMessages(library(quantmod))
 suppressMessages(library(tidyverse))
+suppressMessages(library(here))
 
 
 fit_mgarch <- function(len_out_of_sample, ugarch_model, ugarch_dist_model, garchOrder){
-    full_sample <- read.csv("../data/return_data.csv", sep=";") %>% select(-Date)
+
+    full_sample <- read.csv(paste(here(),"/data/return_data.csv", sep=""), sep=";") %>% select(-Date)
     len_in_sample <- nrow(full_sample) - len_out_of_sample
     in_sample <- head(full_sample, len_in_sample)
     num_assets <- ncol(in_sample)
