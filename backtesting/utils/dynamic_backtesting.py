@@ -96,6 +96,39 @@ def parse_garch_coef(coef, p, model_type):
     return params_dict
 
 
+def calc_weights_garch_with_trading_cost(Omega_ts):
+    assert isinstance(Omega_ts, (list, np.ndarray))
+    p = len(Omega_ts[0])
+    ones = np.ones((p, 1))
+    gamma_D = 8.471737930382345e-05
+    # Let the first weight be similar to garch_no_trading costs:
+    v_1 = divide(dot(inv(Omega_ts[0]), ones), mdot([ones.T, inv(Omega_ts[0]), ones]))
+    v_t_1 = v_1
+
+    v_ts = []
+
+    Avv_guess = None    # First Avv_guess
+    print("Solving Avv")
+    #aims = []
+    for t, Omega_t in enumerate(Omega_ts):
+        if t == 0:
+            v_ts.append(np.ravel(v_1))
+        else:
+            Avv, Av1 = gu.calc_Avs(Omega_t, gamma_D, Avv_guess)
+            aim_t = mdot([inv(Avv), Av1, ones])
+            test = inv(gamma_D*Omega_t)
+            modifier = mdot([test, Avv, v_t_1-aim_t])
+
+            #print(np.sum(modifier))
+            v_t = v_t_1 + modifier
+            #v_t = v_t/np.sum(v_t)
+            v_ts.append(np.ravel(v_t))
+
+            v_t_1 = v_t
+            Avv_guess = Avv
+    return v_ts
+
+
 def calc_weights_garch_no_trading_cost(Omega_ts):
     assert isinstance(Omega_ts, (list, np.ndarray))
     p = len(Omega_ts[0])
@@ -148,8 +181,45 @@ def garch_no_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_
     return v_t, out_of_sample, in_sample, Omega_ts
 
 
+def garch_with_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_of_out_of_sample_days=250*2,
+                          model_type="sGARCH11"):
+    """
+    tickers: ["ticker", "ticker", ..., "ticker"]
+    start: "yyyy-m-d"
+    end: "yyyy-m-d"
+    model_type: One of "sGARCH11", "sGARCH10", "gjrGARCH11", not implemented = "eGARCH11"
+    """
+    assert (model_type in ("sGARCH11", "sGARCH10", "gjrGARCH11"))
+    garch_type = model_type[:-2]
+    garch_order = IntVector((model_type[-2], model_type[-1]))
+    print(f"Calculating weights for:", *tickers)
+    return_data = download_return_data(tickers, start, end, True)
+
+    # Determining dimensions
+    T, p = return_data.shape
+    out_of_sample, in_sample  = split_sample(return_data=return_data,
+                                             number_of_out_of_sample_days=number_of_out_of_sample_days)
+
+    # Fit model
+    coef, residuals, sigmas = fit_garch_model(len_out_of_sample=number_of_out_of_sample_days,
+                                              ugarch_model=garch_type, garch_order=garch_order)
+
+    # Parse variables
+    params_dict = parse_garch_coef(coef=coef, p=p, model_type=model_type)
+
+    Omega_ts = calc_Omega_ts(out_of_sample_returns=out_of_sample, in_sample_returns=in_sample,
+                             in_sample_sigmas=sigmas, in_sample_residuals=residuals, **params_dict)
+    # Generating weights
+    v_t = calc_weights_garch_with_trading_cost(Omega_ts)
+    v_t = pd.DataFrame(v_t, columns=tickers, index=return_data.index[-len(v_t):])
+
+    return v_t, out_of_sample, in_sample, Omega_ts
+
+
 if __name__ == '__main__':
-    v_t, out_of_sample, in_sample, Omega_ts = garch_no_trading_cost(['IVV', 'TLT', 'EEM'],
+    #v_t, out_of_sample, in_sample, Omega_ts = garch_no_trading_cost(['IVV', 'TLT', 'EEM'],
+    #                                                      number_of_out_of_sample_days=1000, model_type="gjrGARCH11")
+    v_t, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['IVV', 'TLT', 'EEM'],
                                                           number_of_out_of_sample_days=1000, model_type="gjrGARCH11")
     # v_t.to_csv('v_t.csv')
     # out_of_sample.to_csv('out_of_sample.csv')
