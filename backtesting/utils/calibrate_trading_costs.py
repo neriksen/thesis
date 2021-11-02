@@ -1,7 +1,6 @@
 import yfinance as yf
 import pandas as pd
-import numpy as np
-
+import os
 
 def calc_gammaD():
     portfolio_value = 1e9
@@ -31,14 +30,14 @@ def calc_gammaD():
     avgvol_std['gammaD'] = (avgvol_std['Avg vol']**2)*((avgvol_std['Avg volume']*0.0159*avgvol_std['Avg price'])**(-1))*0.001*portfolio_value
     print(avgvol_std['gammaD'].mean())
     print(avgvol_std['gammaD'].median())
-    avgvol_std.to_csv('avg_volume.csv')
+    avgvol_std.to_csv(os.path.join(os.path.dirname(__file__), 'avg_volume.csv'))
 
 
 def asset_lookup(asset_names: list, col_lookup):
     """
     Possible col_lookup names: Avg volume, Avg price, Price change vol, gammaD
     """
-    df = pd.read_csv('backtesting/utils/avg_volume.csv', index_col=0)
+    df = pd.read_csv(os.path.join(os.path.dirname(__file__), 'avg_volume.csv'), index_col=0)
     return df[col_lookup].loc[[*asset_names]]
 
 

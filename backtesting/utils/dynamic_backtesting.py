@@ -8,20 +8,10 @@ import pandas as pd
 import yfinance
 import os
 import rpy2.robjects as ro
-import sys
 from rpy2.robjects import pandas2ri
 from rpy2.robjects import IntVector
 from compare_strategies import performance_table
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 pandas2ri.activate()
-
-if sys.platform == "darwin":
-    os.chdir('../../')
-    sys.path.append("data")
-else:
-    os.chdir("..\\..\\")
-    sys.path.append("data")
-
 import garch_utilites as gu
 
 
@@ -31,7 +21,7 @@ def download_return_data(tickers, start="2008-01-01", end="2021-10-02", save_to_
     return_data = return_data.pct_change().iloc[1:]*100
     return_data = return_data[tickers]
     if save_to_csv:
-        return_data.to_csv("data/return_data.csv", sep=";")
+        return_data.to_csv(os.path.join(os.path.dirname(__file__), '../../data/return_data.csv'), sep=";")
     return return_data
 
 
@@ -50,7 +40,7 @@ def fit_garch_model(len_out_of_sample=0, ugarch_model="sGARCH", garch_order=(1, 
     garch_order = IntVector(garch_order)
     # Define the R script and load the instance in Python
     r = ro.r
-    r['source']('backtesting/fitting_mgarch.R')
+    r['source'](str(os.path.join(os.path.dirname(__file__), '../fitting_mgarch.R')))
     # Load the function we have defined in R.
     fit_mgarch_r = ro.globalenv['fit_mgarch']
     # Fit the MGARCH model and receive the result
