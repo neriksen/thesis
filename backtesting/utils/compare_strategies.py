@@ -76,7 +76,7 @@ def performance_table(weights, returns_pct: pd.DataFrame, Omega_ts) -> Tuple[pd.
     # Buy and hold GARCH firs (BnH)
     # Since turnover = |v_t - v_{t-1}*(1+r_t)|, then v_{t-1} = v_t/(1+r_t) when aiming for turnover = 0.
 
-    BnH_weights = []
+    BnH_weights = []    # FIXME: Use empirical covariance of in-sample instead of Omega_t
     for t, (_, _return) in enumerate(returns.shift(1).add(1).iterrows()):
         if t == 0:
             BnH_weights.append(weights.iloc[0].values)
