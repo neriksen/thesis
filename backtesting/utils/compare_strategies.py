@@ -60,11 +60,11 @@ def performance_table(weights, returns_pct: pd.DataFrame, Omega_ts, portfolio_va
     portfolio_returns.columns = ['GARCH']
 
     # Calculate returns net transaction costs
-    TC_garch = calc_transaction_costs(weights, returns, Omega_ts)
+    TC_garch = calc_transaction_costs(weights, returns, Omega_ts, portfolio_value)
     portfolio_returns['GARCH TC'] = portfolio_returns['GARCH']-TC_garch
 
     cum_portfolio_returns = portfolio_returns.add(1).cumprod()
-    TC_Equal_weight = calc_transaction_costs(pd.DataFrame(np.full(weights.shape, (1/p))), returns, Omega_ts)
+    TC_Equal_weight = calc_transaction_costs(pd.DataFrame(np.full(weights.shape, (1/p))), returns, Omega_ts, portfolio_value)
     # 1/N return
     cum_portfolio_returns['Equal_weight'] = returns.mean(axis=1).add(1).cumprod()
     cum_portfolio_returns['Equal_weight TC'] = returns.mean(axis=1).sub(TC_Equal_weight).add(1).cumprod()
