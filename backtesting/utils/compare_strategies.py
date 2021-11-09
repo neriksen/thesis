@@ -18,7 +18,7 @@ def calc_turnover_pct(v_t, v_t_1, r_t):
 def clean_up_returns(series: pd.Series):
     tmp = series.copy()
     for t, gross_return in enumerate(series):
-        if gross_return <= 0:
+        if gross_return <= 0.01:
             tmp[t:] = 0
             if t < len(series):
                 tmp[t+1:] = np.nan
