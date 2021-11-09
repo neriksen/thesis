@@ -19,7 +19,9 @@ def clean_up_returns(series: pd.Series):
     tmp = series.copy()
     for t, gross_return in enumerate(series):
         if gross_return <= 0:
-            tmp[t:] = np.nan
+            tmp[t:] = 0
+            if t < len(series):
+                tmp[t+1:] = np.nan
             break
     return tmp
 
