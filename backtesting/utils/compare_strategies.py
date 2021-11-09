@@ -106,9 +106,11 @@ def performance_table(weights, returns_pct: pd.DataFrame, Omega_ts) -> Tuple[pd.
 
     # Calculate aggregate performance measures
     std = cum_portfolio_returns.pct_change().std()*np.sqrt(250)
-    mean_return = cum_portfolio_returns.pct_change().mean() * 250
-    sharpe = mean_return.divide(std)
+    last_gross_return = cum_portfolio_returns.ffill(axis=0).iloc[-1, :]
+    num_non_nan_periods = len(cum_portfolio_returns)-cum_portfolio_returns.isna().sum()
+    ann_return = ((last_gross_return) ** (250/num_non_nan_periods))-1
+    sharpe = ann_return.divide(std)
 
-    performance_table = pd.DataFrame([std, mean_return, sharpe]).transpose()
+    performance_table = pd.DataFrame([std, ann_return, sharpe]).transpose()
     performance_table.columns = ["Ann. standard deviation", "Ann. return", "Ann. Sharpe ratio"]
     return cum_portfolio_returns, performance_table
