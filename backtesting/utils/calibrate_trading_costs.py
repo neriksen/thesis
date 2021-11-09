@@ -2,6 +2,7 @@ import yfinance as yf
 import pandas as pd
 import os
 
+
 def calc_gammaD():
     portfolio_value = 1e9
     assets = {"EEM": "Emerging Markets",
@@ -39,6 +40,15 @@ def asset_lookup(asset_names: list, col_lookup):
     """
     df = pd.read_csv(os.path.join(os.path.dirname(__file__), 'avg_volume.csv'), index_col=0)
     return df[col_lookup].loc[[*asset_names]]
+
+
+def get_gamma_D(portfolio_value):
+    median_gamma_D_dict = {1e9: 0.0008471730344743024,
+                    1e8: 8.471737930382345e-05}
+    mean_gamma_D_dict = {1e9: 0.005520315335166648,
+                    1e8: 0.0005520316111414786}
+    assert (portfolio_value in median_gamma_D_dict.keys())
+    return median_gamma_D_dict[portfolio_value]
 
 
 if __name__ == '__main__':

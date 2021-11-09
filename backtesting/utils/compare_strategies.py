@@ -26,13 +26,8 @@ def clean_up_returns(series: pd.Series):
     return tmp
 
 
-def calc_transaction_costs(weights: pd.DataFrame, returns, Omega_ts):
-    gamma_D = 8.471737930382345e-05     # Median of gamma_D in data/avg_volume.csv porfolio value 1e8
-    # gamma_D = 0.0005520316111414786     # Mean of gamma_D in data/avg_volume.csv porfolio value 1e8
-    # gamma_D = 0.005520315335166648     # Mean of gamma_D in data/avg_volume.csv porfolio value 1e9
-    # gamma_D = 0.0008471730344743024    # Median of gamma_D in data/avg_volume.csv porfolio value 1e9
-
-    portfolio_value = 1e8,
+def calc_transaction_costs(weights: pd.DataFrame, returns, Omega_ts, portfolio_value=1e9):
+    gamma_D = calibrate_trading_costs.get_gamma_D(portfolio_value)
     TC = np.zeros((len(weights)))
     avg_volume = calibrate_trading_costs.asset_lookup(list(returns.columns), col_lookup="Avg volume")
     avg_price = calibrate_trading_costs.asset_lookup(list(returns.columns), col_lookup="Avg price")
@@ -53,7 +48,7 @@ def calc_transaction_costs(weights: pd.DataFrame, returns, Omega_ts):
     return TC
 
 
-def performance_table(weights, returns_pct: pd.DataFrame, Omega_ts) -> Tuple[pd.DataFrame, Any]:
+def performance_table(weights, returns_pct: pd.DataFrame, Omega_ts, portfolio_value=1e9) -> Tuple[pd.DataFrame, Any]:
     """
     Function assumes weights start in period t-1 and returns_pct start in period t
     """
@@ -88,7 +83,7 @@ def performance_table(weights, returns_pct: pd.DataFrame, Omega_ts) -> Tuple[pd.
             next_weight = np.divide(np.multiply(v_t_1, (1+_return)), 1+dot(v_t_1.T, _return))
             BnH_weights.append(np.ravel(next_weight))
 
-    TC_BnH = calc_transaction_costs(pd.DataFrame(BnH_weights), returns, Omega_ts)
+    TC_BnH = calc_transaction_costs(pd.DataFrame(BnH_weights), returns, Omega_ts, portfolio_value)
     BnH_weights = np.array(BnH_weights)
     BnH_returns = np.multiply(BnH_weights, returns).sum(axis=1)
     cum_portfolio_returns['BnH'] = BnH_returns.add(1).cumprod()

@@ -11,6 +11,7 @@ import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
 from rpy2.robjects import IntVector
 from compare_strategies import performance_table
+from calibrate_trading_costs import get_gamma_D
 pandas2ri.activate()
 import garch_utilites as gu
 
@@ -96,11 +97,11 @@ def parse_garch_coef(coef, p, model_type):
     return params_dict
 
 
-def calc_weights_garch_with_trading_cost(Omega_ts):
+def calc_weights_garch_with_trading_cost(Omega_ts, portfolio_value=1e9):
     assert isinstance(Omega_ts, (list, np.ndarray))
     p = len(Omega_ts[0])
     ones = np.ones((p, 1))
-    gamma_D = 8.471737930382345e-05
+    gamma_D = get_gamma_D(portfolio_value)
     # Let the first weight be similar to garch_no_trading costs:
     v_1 = divide(dot(inv(Omega_ts[0]), ones), mdot([ones.T, inv(Omega_ts[0]), ones]))
     v_t_1 = v_1
@@ -116,8 +117,7 @@ def calc_weights_garch_with_trading_cost(Omega_ts):
         else:
             Avv, Av1 = gu.calc_Avs(Omega_t, gamma_D, Avv_guess)
             aim_t = mdot([inv(Avv), Av1, ones])
-            test = inv(gamma_D*Omega_t)
-            modifier = mdot([test, Avv, v_t_1-aim_t])
+            modifier = mdot([inv(gamma_D*Omega_t), Avv, v_t_1-aim_t])
 
             #print(np.sum(modifier))
             v_t = v_t_1 + modifier
@@ -182,7 +182,7 @@ def garch_no_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_
 
 
 def garch_with_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_of_out_of_sample_days=250*2,
-                          model_type="sGARCH11"):
+                          model_type="sGARCH11", portfolio_value=1e9):
     """
     tickers: ["ticker", "ticker", ..., "ticker"]
     start: "yyyy-m-d"
@@ -210,15 +210,13 @@ def garch_with_trading_cost(tickers, start="2008-01-01", end="2021-10-02", numbe
     Omega_ts = calc_Omega_ts(out_of_sample_returns=out_of_sample, in_sample_returns=in_sample,
                              in_sample_sigmas=sigmas, in_sample_residuals=residuals, **params_dict)
     # Generating weights
-    v_t = calc_weights_garch_with_trading_cost(Omega_ts)
+    v_t = calc_weights_garch_with_trading_cost(Omega_ts, portfolio_value)
     v_t = pd.DataFrame(v_t, columns=tickers, index=return_data.index[-len(v_t):])
 
     return v_t, out_of_sample, in_sample, Omega_ts
 
 
 if __name__ == '__main__':
-    #v_t, out_of_sample, in_sample, Omega_ts = garch_no_trading_cost(['IVV', 'TLT', 'EEM'],
-    #                                                      number_of_out_of_sample_days=1000, model_type="gjrGARCH11")
     v_t, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['IVV', 'TLT', 'EEM'],
                                                           number_of_out_of_sample_days=1000, model_type="gjrGARCH11")
     # v_t.to_csv('v_t.csv')
@@ -228,7 +226,7 @@ if __name__ == '__main__':
     # out_of_sample = pd.read_csv('out_of_sample.csv', index_col=0)
     # in_sample = pd.read_csv('in_sample.csv', index_col=0)
 
-    cum_returns, performance_table = performance_table(v_t, out_of_sample, Omega_ts)
+    cum_returns, performance_table = performance_table(v_t, out_of_sample, Omega_ts, portfolio_value=1e9)
     print(performance_table)
     plt.plot(cum_returns)
     plt.show()
