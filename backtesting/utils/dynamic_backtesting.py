@@ -153,7 +153,7 @@ def unconditional_weights(tickers, start="2008-01-01", end="2021-10-02", number_
     return_data=download_return_data(tickers, start, end, save_to_csv=True)
     out_of_sample, _ = split_sample(return_data, number_of_out_of_sample_days)
     Omega_uncond=out_of_sample.cov() #Use only the sample that we ant to test on
-    ones = np.ones((len(Omega_uncond), 1))''
+    ones = np.ones((len(Omega_uncond), 1))
     weights = np.ravel(divide(dot(inv(Omega_uncond), ones), mdot([ones.T, inv(Omega_uncond), ones])))
     weights = pd.DataFrame(np.full(out_of_sample.shape, weights), columns=tickers, index=out_of_sample.index)
     return weights
