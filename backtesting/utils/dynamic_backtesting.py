@@ -149,34 +149,13 @@ def calc_Omega_ts(out_of_sample_returns, in_sample_returns, in_sample_sigmas, in
     return Omega_ts
 
 
-def unconditional_garch_weights(tickers, start="2008-01-01", end="2021-10-02", number_of_out_of_sample_days=250*4,
-                          model_type="sGARCH11"):
-    """
-    tickers: ["ticker", "ticker", ..., "ticker"]
-    start: "yyyy-m-d"
-    end: "yyyy-m-d"
-    model_type: One of "sGARCH11", "sGARCH10", "gjrGARCH11", not implemented = "eGARCH11"
-    """
-    assert (model_type in ("sGARCH11", "sGARCH10", "gjrGARCH11"))
-    out_of_sample, in_sample, sigmas, residuals, params_dict = split_fit_parse(tickers, start, end,
-                                                                               number_of_out_of_sample_days, model_type)
-    # Omega_uncond = pd.DataFrame(residuals).cov()
-    kappa = 0 if params_dict['kappa'] is None else params_dict['kappa']
-
-    sigma_2 = params_dict['omega']/(1-params_dict['beta'])
-    #sigma_2 = params_dict['omega']/(1-params_dict['beta']-params_dict['alpha'] - 0.5*kappa)
-    Var, _ = gu.calc_Var_t(sigma_2)
-    #Var = np.diag(np.ravel(params_dict['omega']))
-    Gamma = gu.calc_Qbar(residuals, sigmas)      # Which is really Qbar
-    #Gamma = gu.calc_Qbar(residuals, sigmas)*(1-params_dict['dcca']-params_dict['dccb'])      # Which is really Qbar
-    Gamma = gu.calc_Gamma_t_plus_1(Gamma)
-    Omega_uncond = mdot([Var, Gamma, Var])
-    #Omega_uncond = Gamma
-
-    ones = np.ones((len(Omega_uncond), 1))
+def unconditional_weights(tickers, start="2008-01-01", end="2021-10-02", number_of_out_of_sample_days=250*4):
+    return_data=download_return_data(tickers, start, end, save_to_csv=True)
+    out_of_sample, _ = split_sample(return_data, number_of_out_of_sample_days)
+    Omega_uncond=out_of_sample.cov() #Use only the sample that we ant to test on
+    ones = np.ones((len(Omega_uncond), 1))''
     weights = np.ravel(divide(dot(inv(Omega_uncond), ones), mdot([ones.T, inv(Omega_uncond), ones])))
     weights = pd.DataFrame(np.full(out_of_sample.shape, weights), columns=tickers, index=out_of_sample.index)
-    #return weights, Var
     return weights
 
 
