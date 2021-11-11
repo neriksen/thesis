@@ -160,19 +160,24 @@ def unconditional_garch_weights(tickers, start="2008-01-01", end="2021-10-02", n
     assert (model_type in ("sGARCH11", "sGARCH10", "gjrGARCH11"))
     out_of_sample, in_sample, sigmas, residuals, params_dict = split_fit_parse(tickers, start, end,
                                                                                number_of_out_of_sample_days, model_type)
+    # Omega_uncond = pd.DataFrame(residuals).cov()
     kappa = 0 if params_dict['kappa'] is None else params_dict['kappa']
 
-    #sigma_2 = params_dict['omega']/(1-params_dict['alpha']-params_dict['beta']-0.5*kappa)
-    #Var, _ = gu.calc_Var_t(sigma_2)
-    Var = np.diag(np.ravel(params_dict['omega']))
+    sigma_2 = params_dict['omega']/(1-params_dict['beta'])
+    #sigma_2 = params_dict['omega']/(1-params_dict['beta']-params_dict['alpha'] - 0.5*kappa)
+    Var, _ = gu.calc_Var_t(sigma_2)
+    #Var = np.diag(np.ravel(params_dict['omega']))
     Gamma = gu.calc_Qbar(residuals, sigmas)      # Which is really Qbar
+    #Gamma = gu.calc_Qbar(residuals, sigmas)*(1-params_dict['dcca']-params_dict['dccb'])      # Which is really Qbar
     Gamma = gu.calc_Gamma_t_plus_1(Gamma)
     Omega_uncond = mdot([Var, Gamma, Var])
+    #Omega_uncond = Gamma
 
     ones = np.ones((len(Omega_uncond), 1))
     weights = np.ravel(divide(dot(inv(Omega_uncond), ones), mdot([ones.T, inv(Omega_uncond), ones])))
     weights = pd.DataFrame(np.full(out_of_sample.shape, weights), columns=tickers, index=out_of_sample.index)
-    return weights, Var
+    #return weights, Var
+    return weights
 
 
 def split_fit_parse(tickers, start, end, number_of_out_of_sample_days, model_type):
@@ -241,7 +246,7 @@ def garch_with_trading_cost(tickers, start="2008-01-01", end="2021-10-02", numbe
 if __name__ == '__main__':
     #v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['IVV', 'TLT', 'EEM'],
     #                                                      number_of_out_of_sample_days=1000, model_type="gjrGARCH11")
-    v_t_s_uncon, _ = unconditional_garch_weights(['IVV', 'TLT', 'EEM'])
+    v_t_s_uncon = unconditional_garch_weights(['IVV', 'TLT', 'EEM'], model_type="sGARCH11", number_of_out_of_sample_days=50)
     v_t_s, out_of_sample, in_sample, Omega_ts = garch_no_trading_cost(['IVV', 'TLT', 'EEM'],
                                                            number_of_out_of_sample_days=1000, model_type="sGARCH11")
     #v_t_s, out_of_sample, in_sample, Omega_ts = garch_no_trading_cost(['EEM', 'IVV', 'IEV', 'IXN', 'IYR', 'IXG', 'EXI', 'GC=F', 'BZ=F', 'HYG', 'TLT'],
