@@ -8,8 +8,6 @@ from scipy.optimize import minimize
 
 def main_loop(out_of_sample_returns, in_sample_returns, sigmas, epsilons, Qbar, Q_t, **kw):
     initial_value_check(out_of_sample_returns, sigmas, epsilons, Qbar, Q_t, **kw)
-    if kw['kappa'] is not None:
-        print('gjrGARCH11 detected')
     Omega_ts = []
     p = np.size(sigmas, 1)
     periods_to_run = len(out_of_sample_returns)-1
