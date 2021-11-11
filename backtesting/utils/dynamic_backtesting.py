@@ -158,15 +158,34 @@ def unconditional_garch_weights(tickers, start="2008-01-01", end="2021-10-02", n
     model_type: One of "sGARCH11", "sGARCH10", "gjrGARCH11", not implemented = "eGARCH11"
     """
     assert (model_type in ("sGARCH11", "sGARCH10", "gjrGARCH11"))
+    out_of_sample, in_sample, sigmas, residuals, params_dict = split_fit_parse(tickers, start, end,
+                                                                               number_of_out_of_sample_days, model_type)
+    kappa = 0 if params_dict['kappa'] is None else params_dict['kappa']
+
+    #sigma_2 = params_dict['omega']/(1-params_dict['alpha']-params_dict['beta']-0.5*kappa)
+    #Var, _ = gu.calc_Var_t(sigma_2)
+    Var = np.diag(np.ravel(params_dict['omega']))
+    Gamma = gu.calc_Qbar(residuals, sigmas)      # Which is really Qbar
+    Gamma = gu.calc_Gamma_t_plus_1(Gamma)
+    Omega_uncond = mdot([Var, Gamma, Var])
+
+    ones = np.ones((len(Omega_uncond), 1))
+    weights = np.ravel(divide(dot(inv(Omega_uncond), ones), mdot([ones.T, inv(Omega_uncond), ones])))
+    weights = pd.DataFrame(np.full(out_of_sample.shape, weights), columns=tickers, index=out_of_sample.index)
+    return weights, Var
+
+
+def split_fit_parse(tickers, start, end, number_of_out_of_sample_days, model_type):
+    print(tickers)
     garch_type = model_type[:-2]
     garch_order = IntVector((model_type[-2], model_type[-1]))
-    print(f"Calculating weights for:", *tickers)
+
     return_data = download_return_data(tickers, start, end, True)
 
     # Determining dimensions
     T, p = return_data.shape
-    out_of_sample, in_sample  = split_sample(return_data=return_data,
-                                             number_of_out_of_sample_days=number_of_out_of_sample_days)
+    out_of_sample, in_sample = split_sample(return_data=return_data,
+                                            number_of_out_of_sample_days=number_of_out_of_sample_days)
 
     # Fit model
     coef, residuals, sigmas = fit_garch_model(len_out_of_sample=number_of_out_of_sample_days,
@@ -174,17 +193,31 @@ def unconditional_garch_weights(tickers, start="2008-01-01", end="2021-10-02", n
 
     # Parse variables
     params_dict = parse_garch_coef(coef=coef, p=p, model_type=model_type)
+    return out_of_sample, in_sample, sigmas, residuals, params_dict
+
+
+def garch_no_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_of_out_of_sample_days=250*4,
+                          model_type="sGARCH11"):
+    """
+    tickers: ["ticker", "ticker", ..., "ticker"]
+    start: "yyyy-m-d"
+    end: "yyyy-m-d"
+    model_type: One of "sGARCH11", "sGARCH10", "gjrGARCH11", not implemented = "eGARCH11"
+    """
+    assert (model_type in ("sGARCH11", "sGARCH10", "gjrGARCH11"))
+    out_of_sample, in_sample, sigmas, residuals, params_dict = split_fit_parse(tickers, start, end,
+                                                                               number_of_out_of_sample_days, model_type)
 
     Omega_ts = calc_Omega_ts(out_of_sample_returns=out_of_sample, in_sample_returns=in_sample,
                              in_sample_sigmas=sigmas, in_sample_residuals=residuals, **params_dict)
     # Generating weights
     v_t = calc_weights_garch_no_trading_cost(Omega_ts)
-    v_t = pd.DataFrame(v_t, columns=tickers, index=return_data.index[-len(v_t):])
+    v_t = pd.DataFrame(v_t, columns=tickers, index=out_of_sample.index)
 
     return v_t, out_of_sample, in_sample, Omega_ts
 
 
-def garch_with_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_of_out_of_sample_days=250*2,
+def garch_with_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_of_out_of_sample_days=250*4,
                           model_type="sGARCH11", portfolio_value=1e9):
     """
     tickers: ["ticker", "ticker", ..., "ticker"]
@@ -193,35 +226,26 @@ def garch_with_trading_cost(tickers, start="2008-01-01", end="2021-10-02", numbe
     model_type: One of "sGARCH11", "sGARCH10", "gjrGARCH11", not implemented = "eGARCH11"
     """
     assert (model_type in ("sGARCH11", "sGARCH10", "gjrGARCH11"))
-    garch_type = model_type[:-2]
-    garch_order = IntVector((model_type[-2], model_type[-1]))
-    print(f"Calculating weights for:", *tickers)
-    return_data = download_return_data(tickers, start, end, True)
-
-    # Determining dimensions
-    T, p = return_data.shape
-    out_of_sample, in_sample  = split_sample(return_data=return_data,
-                                             number_of_out_of_sample_days=number_of_out_of_sample_days)
-
-    # Fit model
-    coef, residuals, sigmas = fit_garch_model(len_out_of_sample=number_of_out_of_sample_days,
-                                              ugarch_model=garch_type, garch_order=garch_order)
-
-    # Parse variables
-    params_dict = parse_garch_coef(coef=coef, p=p, model_type=model_type)
+    out_of_sample, in_sample, sigmas, residuals, params_dict = split_fit_parse(tickers, start, end,
+                                                                               number_of_out_of_sample_days, model_type)
 
     Omega_ts = calc_Omega_ts(out_of_sample_returns=out_of_sample, in_sample_returns=in_sample,
                              in_sample_sigmas=sigmas, in_sample_residuals=residuals, **params_dict)
     # Generating weights
     v_t = calc_weights_garch_with_trading_cost(Omega_ts, portfolio_value)
-    v_t = pd.DataFrame(v_t, columns=tickers, index=return_data.index[-len(v_t):])
+    v_t = pd.DataFrame(v_t, columns=tickers, index=out_of_sample.index)
 
     return v_t, out_of_sample, in_sample, Omega_ts
 
 
 if __name__ == '__main__':
-    v_t, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['IVV', 'TLT', 'EEM'],
-                                                          number_of_out_of_sample_days=1000, model_type="gjrGARCH11")
+    #v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['IVV', 'TLT', 'EEM'],
+    #                                                      number_of_out_of_sample_days=1000, model_type="gjrGARCH11")
+    v_t_s_uncon, _ = unconditional_garch_weights(['IVV', 'TLT', 'EEM'])
+    v_t_s, out_of_sample, in_sample, Omega_ts = garch_no_trading_cost(['IVV', 'TLT', 'EEM'],
+                                                           number_of_out_of_sample_days=1000, model_type="sGARCH11")
+    #v_t_s, out_of_sample, in_sample, Omega_ts = garch_no_trading_cost(['EEM', 'IVV', 'IEV', 'IXN', 'IYR', 'IXG', 'EXI', 'GC=F', 'BZ=F', 'HYG', 'TLT'],
+    #                                                      number_of_out_of_sample_days=1000, model_type="gjrGARCH11")
     # v_t.to_csv('v_t.csv')
     # out_of_sample.to_csv('out_of_sample.csv')
     # in_sample.to_csv('in_sample.csv')
@@ -229,7 +253,9 @@ if __name__ == '__main__':
     # out_of_sample = pd.read_csv('out_of_sample.csv', index_col=0)
     # in_sample = pd.read_csv('in_sample.csv', index_col=0)
 
-    cum_returns, performance_table = performance_table(v_t, out_of_sample, Omega_ts, portfolio_value=1e9)
+    cum_returns, performance_table = performance_table(v_t_s, out_of_sample, Omega_ts, portfolio_value=1e8)
     print(performance_table)
     plt.plot(cum_returns)
+    plt.plot(v_t_s)
+    #plt.yscale('log')
     plt.show()
