@@ -97,35 +97,38 @@ def parse_garch_coef(coef, p, model_type):
     return params_dict
 
 
-def calc_weights_garch_with_trading_cost(Omega_ts, portfolio_value=1e9):
-    assert isinstance(Omega_ts, (list, np.ndarray))
-    p = len(Omega_ts[0])
+def calc_weights_garch_with_trading_cost(Omega_t_plus1s, portfolio_value=1e9):
+    assert isinstance(Omega_t_plus1s, (list, np.ndarray))
+    p = len(Omega_t_plus1s[0])
     ones = np.ones((p, 1))
     gamma_D = get_gamma_D(portfolio_value)
     # Let the first weight be similar to garch_no_trading costs:
-    v_1 = divide(dot(inv(Omega_ts[0]), ones), mdot([ones.T, inv(Omega_ts[0]), ones]))
+    v_1 = divide(dot(inv(Omega_t_plus1s[0]), ones), mdot([ones.T, inv(Omega_t_plus1s[0]), ones]))
     v_t_1 = v_1
+
+    # Sigma = np.array([[ 1.65729471, -0.53047418,  2.07542849],
+    #    [-0.53047418,  0.90200802, -0.6495747 ],
+    #    [ 2.07542849, -0.6495747 ,  3.57961394]])
 
     v_ts = []
 
     Avv_guess = None    # First Avv_guess
     print("Solving Avv")
-    #aims = []
-    for t, Omega_t in enumerate(Omega_ts):
+    for t, Omega in enumerate(Omega_t_plus1s):
+        print(t)
         if t == 0:
             v_ts.append(np.ravel(v_1))
         else:
-            Avv, Av1 = gu.calc_Avs(Omega_t, gamma_D, Avv_guess)
+            Avv, Av1 = gu.calc_Avs(Omega_t=Omega, gamma_D=gamma_D, Avv_guess=Avv_guess)
             aim_t = mdot([inv(Avv), Av1, ones])
-            modifier = mdot([inv(gamma_D*Omega_t), Avv, v_t_1-aim_t])
+            aim_t = aim_t/np.sum(aim_t)
 
-            #print(np.sum(modifier))
+            modifier = mdot([inv(gamma_D*Omega), Avv, (v_t_1-aim_t)])
             v_t = v_t_1 + modifier
-            #v_t = v_t/np.sum(v_t)
-            v_ts.append(np.ravel(v_t))
 
+            v_ts.append(np.ravel(v_t))
             v_t_1 = v_t
-            Avv_guess = Avv
+            Avv_guess = Avv     # Speed up convergence by giving the solver last period's solution as next guess
     return v_ts
 
 
