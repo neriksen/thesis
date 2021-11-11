@@ -144,12 +144,12 @@ def calc_Omega_ts(out_of_sample_returns, in_sample_returns, in_sample_sigmas, in
     Qbar = gu.calc_Qbar(in_sample_residuals, in_sample_sigmas)
     Q_t = Qbar      # Qbar is the same as Q_t at the start of the out-of-sample period
 
-    Omega_ts = gu.main_loop(out_of_sample_returns=out_of_sample_returns, in_sample_returns = in_sample_returns,
-                        sigmas=in_sample_sigmas, epsilons=in_sample_residuals, Qbar = Qbar, Q_t = Q_t, **kw)
+    Omega_ts = gu.main_loop(out_of_sample_returns=out_of_sample_returns, in_sample_returns=in_sample_returns,
+                        sigmas=in_sample_sigmas, epsilons=in_sample_residuals, Qbar=Qbar, Q_t=Q_t, **kw)
     return Omega_ts
 
 
-def garch_no_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_of_out_of_sample_days=250*2,
+def unconditional_garch_weights(tickers, start="2008-01-01", end="2021-10-02", number_of_out_of_sample_days=250*4,
                           model_type="sGARCH11"):
     """
     tickers: ["ticker", "ticker", ..., "ticker"]
