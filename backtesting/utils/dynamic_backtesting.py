@@ -14,6 +14,7 @@ from compare_strategies import performance_table
 from calibrate_trading_costs import get_gamma_D
 pandas2ri.activate()
 import garch_utilites as gu
+from multiprocessing import Pool
 
 
 def download_return_data(tickers, start="2008-01-01", end="2021-10-02", save_to_csv=True):
@@ -97,11 +98,12 @@ def parse_garch_coef(coef, p, model_type):
     return params_dict
 
 
-def calc_weights_garch_with_trading_cost(Omega_t_plus1s, portfolio_value=1e9):
+def calc_weights_garch_with_trading_cost(Omega_t_plus1s, portfolio_value=1e9, gamma_D=None):
     assert isinstance(Omega_t_plus1s, (list, np.ndarray))
     p = len(Omega_t_plus1s[0])
     ones = np.ones((p, 1))
-    gamma_D = get_gamma_D(portfolio_value)
+    if gamma_D is None:
+        gamma_D = get_gamma_D(portfolio_value)
     # Let the first weight be similar to garch_no_trading costs:
     v_1 = divide(dot(inv(Omega_t_plus1s[0]), ones), mdot([ones.T, inv(Omega_t_plus1s[0]), ones]))
     v_t_1 = v_1
@@ -113,13 +115,12 @@ def calc_weights_garch_with_trading_cost(Omega_t_plus1s, portfolio_value=1e9):
     v_ts = []
 
     Avv_guess = None    # First Avv_guess
-    print("Solving Avv")
+    print(f"Solving problem with trading costs. gamma_D = {gamma_D}")
     for t, Omega in enumerate(Omega_t_plus1s):
-        print(t)
         if t == 0:
             v_ts.append(np.ravel(v_1))
         else:
-            Avv, Av1 = gu.calc_Avs(Omega_t=Omega, gamma_D=gamma_D, Avv_guess=Avv_guess)
+            Avv, Av1 = gu.calc_Avs(Omega_t=Omega, gamma_D=get_gamma_D(portfolio_value), Avv_guess=Avv_guess)
             aim_t = mdot([inv(Avv), Av1, ones])
             aim_t = aim_t/np.sum(aim_t)
 
@@ -138,7 +139,7 @@ def calc_weights_garch_no_trading_cost(Omega_ts):
     ones = np.ones((p, 1))
     v_t = [np.ravel(divide(dot(inv(Omega), ones), mdot([ones.T, inv(Omega), ones]))) for Omega in Omega_ts]
     return v_t
-    
+
 
 def calc_Omega_ts(out_of_sample_returns, in_sample_returns, in_sample_sigmas, in_sample_residuals, **kw):
     Qbar = gu.calc_Qbar(in_sample_residuals, in_sample_sigmas)
@@ -222,24 +223,70 @@ def garch_with_trading_cost(tickers, start="2008-01-01", end="2021-10-02", numbe
     return v_t, out_of_sample, in_sample, Omega_ts
 
 
+def multiprocessing_helper(gamma_D, Omega_ts, portfolio_value, tickers, out_of_sample):
+    v_t = calc_weights_garch_with_trading_cost(Omega_ts, portfolio_value, gamma_D=gamma_D)
+    v_t = pd.DataFrame(v_t, columns=tickers, index=out_of_sample.index)
+    cum_returns, perf_table = performance_table(v_t, out_of_sample, Omega_ts, portfolio_value=portfolio_value)
+    res = perf_table.loc[['GARCH TC', 'Equal_weight TC', 'BnH TC']][['Ann. Sharpe ratio']].values
+    res = np.append(np.array([[gamma_D]]), res)
+    print(res)
+    return res
+
+
+def test_gamma_D_params(tickers, start="2008-01-01", end="2021-10-02", number_of_out_of_sample_days=250*4,
+                          model_type="sGARCH11", portfolio_value=1e9, gamma_start=1e-13, gamma_end=1e-2, gamma_num=20):
+
+    gamma_Ds = np.geomspace(gamma_start, gamma_end, gamma_num)
+    """
+    tickers: ["ticker", "ticker", ..., "ticker"]
+    start: "yyyy-m-d"
+    end: "yyyy-m-d"
+    model_type: One of "sGARCH11", "sGARCH10", "gjrGARCH11", not implemented = "eGARCH11"
+    """
+    assert (model_type in ("sGARCH11", "sGARCH10", "gjrGARCH11"))
+    out_of_sample, in_sample, sigmas, residuals, params_dict = split_fit_parse(tickers, start, end,
+                                                                               number_of_out_of_sample_days, model_type)
+
+    Omega_ts = calc_Omega_ts(out_of_sample_returns=out_of_sample, in_sample_returns=in_sample,
+                             in_sample_sigmas=sigmas, in_sample_residuals=residuals, **params_dict)
+    sharpe_ratios = []
+    # Generating multiprocsseing job:
+    multi_args = [(gamma_D, Omega_ts, portfolio_value, tickers, out_of_sample) for gamma_D in gamma_Ds]
+    # Generating weights
+    with Pool() as p:
+        sharpe_ratios = p.starmap(multiprocessing_helper, multi_args)
+
+    return sharpe_ratios
+
+
 if __name__ == '__main__':
+    portfolio_value = 1e8
+    sharpes = test_gamma_D_params(['EEM', 'IVV', 'IEV', 'IXN', 'IYR', 'IXG', 'EXI', 'GC=F', 'BZ=F', 'HYG', 'TLT']
+                                  , number_of_out_of_sample_days=1000, model_type="sGARCH11",
+                                                                        portfolio_value=1e8,
+                                  gamma_start=1e-7, gamma_end=0.1, gamma_num=50)
     #v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['IVV', 'TLT', 'EEM'],
-    #                                                      number_of_out_of_sample_days=1000, model_type="gjrGARCH11")
-    v_t_s_uncon = unconditional_garch_weights(['IVV', 'TLT', 'EEM'], model_type="sGARCH11", number_of_out_of_sample_days=50)
-    v_t_s, out_of_sample, in_sample, Omega_ts = garch_no_trading_cost(['IVV', 'TLT', 'EEM'],
-                                                           number_of_out_of_sample_days=1000, model_type="sGARCH11")
+    #                                                      number_of_out_of_sample_days=1000, model_type="gjrGARCH11",
+    #                                                                    portfolio_value=1e9)
+    #v_t_s_uncon = unconditional_garch_weights(['IVV', 'TLT', 'EEM'], model_type="sGARCH11", number_of_out_of_sample_days=50)
+    #v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['IVV', 'TLT', 'EEM'],
+    #                                                       number_of_out_of_sample_days=1000, model_type="sGARCH11")
     #v_t_s, out_of_sample, in_sample, Omega_ts = garch_no_trading_cost(['EEM', 'IVV', 'IEV', 'IXN', 'IYR', 'IXG', 'EXI', 'GC=F', 'BZ=F', 'HYG', 'TLT'],
-    #                                                      number_of_out_of_sample_days=1000, model_type="gjrGARCH11")
+    #
     # v_t.to_csv('v_t.csv')
     # out_of_sample.to_csv('out_of_sample.csv')
     # in_sample.to_csv('in_sample.csv')
     # v_t = pd.read_csv('v_t.csv', index_col=0)
     # out_of_sample = pd.read_csv('out_of_sample.csv', index_col=0)
     # in_sample = pd.read_csv('in_sample.csv', index_col=0)
-
-    cum_returns, performance_table = performance_table(v_t_s, out_of_sample, Omega_ts, portfolio_value=1e8)
-    print(performance_table)
-    plt.plot(cum_returns)
-    plt.plot(v_t_s)
-    #plt.yscale('log')
+    #print(sharpes)
+    #cum_returns, perf_table = performance_table(v_t_s, out_of_sample, Omega_ts, portfolio_value=portfolio_value)
+    #print(perf_table)
+    for sharpe in sharpes:
+        print(sharpe)
+    sharpes = pd.DataFrame(sharpes, columns=['gamma_D', 'GARCH TC', 'Equal_weight TC', 'BnH TC'])
+    sharpes.set_index('gamma_D', drop=True, inplace=True)
+    plt.plot(sharpes)
+    #plt.plot(v_t_s)
+    plt.xscale('log')
     plt.show()
