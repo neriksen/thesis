@@ -44,8 +44,8 @@ def asset_lookup(asset_names: list, col_lookup):
 
 
 def get_gamma_D(mean_or_median):
-    gamma_D_dict = {"mean": 1.526988705495546e-06,
-                    "median": 8.471737930382345e-05}
+    gamma_D_dict = {"mean": 3.378117760647255e-05,
+                    "median": 1.526988705495546e-06}
     assert (mean_or_median in gamma_D_dict.keys())
     return gamma_D_dict[mean_or_median]
 
