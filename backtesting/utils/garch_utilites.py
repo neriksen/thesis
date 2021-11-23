@@ -144,10 +144,9 @@ def calc_Omega_t_plus_1(Var_t_plus_1, Gamma_t_plus_1):
 
 
 def calc_Avs(Omega_t, gamma_D, Avv_guess):
-    # FIXME: Omega_t AND Omega_t_plus_1
     # Setup
     global Lambda_t, rho, ones, p
-    rho = 1 - np.exp(-0.02 / 260)
+    rho = 1 - np.exp(-0.02 / 250)
     Lambda_t = (gamma_D * Omega_t) / (1 - rho)
     p = Omega_t.shape[0]
     ones = np.ones((p, 1))
@@ -189,7 +188,7 @@ def compare_sides(Avv, Omega_t):
     J_t_inv = inv(Omega_t + Avv + Lambda_t)
     Left = LHS(Avv)
     Right = RHS()
-    diff = np.abs(Left-Right)**2
+    diff = np.trace(dot((Left-Right).T, (Left-Right)))
     return np.sum(diff)
 
 
@@ -200,3 +199,20 @@ def LHS(Avv):
 
 def RHS():
     return mdot([Lambda_t, J_t_inv, ones, 1/(mdot([ones.T, J_t_inv, ones])), ones.T, J_t_inv, Lambda_t])-mdot([Lambda_t, J_t_inv, Lambda_t]) - Lambda_t
+
+
+if __name__ == '__main__':
+    Omega_t = np.array([[1.65729471, -0.53047418,  2.07542849],
+        [-0.53047418,  0.90200802, -0.6495747],
+        [ 2.07542849, -0.6495747, 3.57961394]])
+
+    gamma_Ds = np.linspace(1e-7, 100, 100)
+    Avv_sum = []
+
+    for gamma_D in gamma_Ds:
+        Avv, Av1 = calc_Avs(Omega_t, gamma_D, Omega_t)
+        Avv_sum.append(np.sum(Avv))
+
+    import matplotlib.pyplot as plt
+    plt.plot(pd.DataFrame(Avv_sum, index=pd.Index(gamma_Ds)))
+    plt.show()
