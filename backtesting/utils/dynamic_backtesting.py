@@ -98,6 +98,12 @@ def parse_garch_coef(coef, p, model_type):
     return params_dict
 
 
+def calc_weights_garch_with_trading_cost_multi_helper(Omega_t_plus_1, gamma_D=None):
+    Avv_guess = Omega_t_plus_1
+    Avv, Av1 = gu.calc_Avs(Omega_t=Omega_t_plus_1, gamma_D=gamma_D, Avv_guess=Avv_guess)
+    return Avv, Av1
+
+
 def calc_weights_garch_with_trading_cost(Omega_t_plus1s, gamma_D=None):
     assert isinstance(Omega_t_plus1s, (list, np.ndarray))
     p = len(Omega_t_plus1s[0])
@@ -112,11 +118,16 @@ def calc_weights_garch_with_trading_cost(Omega_t_plus1s, gamma_D=None):
 
     Avv_guess = None    # First Avv_guess
     print(f"Solving problem with trading costs. gamma_D = {gamma_D}")
-    for t, Omega in enumerate(Omega_t_plus1s):
+    # Calculate Avv and Av1 matricies for each Omega
+    multi_args = [(Omega_t, gamma_D) for Omega_t in Omega_t_plus1s]
+    with Pool() as p:
+        res = p.starmap(calc_weights_garch_with_trading_cost_multi_helper, multi_args)
+
+    for t, (Omega, (Avv, Av1)) in enumerate(zip(Omega_t_plus1s, res)):
+        print(t)
         if t == 0:
             v_ts.append(np.ravel(v_1))
         else:
-            Avv, Av1 = gu.calc_Avs(Omega_t=Omega, gamma_D=gamma_D, Avv_guess=Avv_guess)
             aim_t = mdot([inv(Avv), Av1, ones])
             aim_t = aim_t/np.sum(aim_t)
 
@@ -125,7 +136,6 @@ def calc_weights_garch_with_trading_cost(Omega_t_plus1s, gamma_D=None):
 
             v_ts.append(np.ravel(v_t))
             v_t_1 = v_t
-            Avv_guess = Avv     # Speed up convergence by giving the solver last period's solution as next guess
     return v_ts
 
 
@@ -199,7 +209,7 @@ def garch_no_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_
 
 
 def garch_with_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_of_out_of_sample_days=250*4,
-                          model_type="sGARCH11", portfolio_value=1e9, gamma_D=None):
+                          model_type="sGARCH11", gamma_D=None):
     """
     tickers: ["ticker", "ticker", ..., "ticker"]
     start: "yyyy-m-d"
@@ -245,7 +255,6 @@ def test_gamma_D_params(tickers, start="2008-01-01", end="2021-10-02", number_of
 
     Omega_ts = calc_Omega_ts(out_of_sample_returns=out_of_sample, in_sample_returns=in_sample,
                              in_sample_sigmas=sigmas, in_sample_residuals=residuals, **params_dict)
-    sharpe_ratios = []
     # Generating multiprocessing job:
     multi_args = [(gamma_D, Omega_ts, portfolio_value, tickers, out_of_sample) for gamma_D in gamma_Ds]
     # Generating weights
@@ -261,10 +270,10 @@ if __name__ == '__main__':
     #                              , number_of_out_of_sample_days=1000, model_type="sGARCH11",
     #                                                                    portfolio_value=1e8,
     #                              gamma_start=1e-7, gamma_end=0.1, gamma_num=50)
-    v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['IVV', 'TLT', 'EEM'],
-                                                          number_of_out_of_sample_days=1000, model_type="sGARCH11",
-                                                                        portfolio_value=1e9)
-    #v_t_s, out_of_sample, in_sample, Omega_ts = garch_no_trading_cost(['EEM', 'IVV', 'IEV', 'IXN', 'IYR', 'IXG', 'EXI', 'GC=F', 'BZ=F', 'HYG', 'TLT'],
+    #v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['IVV', 'TLT', 'EEM'],
+    #                                                      number_of_out_of_sample_days=1000, model_type="sGARCH11")
+    v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['EEM', 'IVV', 'IEV', 'IXN', 'IYR', 'IXG', 'EXI', 'GC=F', 'BZ=F', 'HYG', 'TLT'],
+                                                                        model_type="sGARCH10")
     #
     # v_t.to_csv('v_t.csv')
     # out_of_sample.to_csv('out_of_sample.csv')
@@ -281,6 +290,6 @@ if __name__ == '__main__':
     # sharpes.set_index('gamma_D', drop=True, inplace=True)
     # plt.plot(sharpes)
     plt.plot(cum_returns)
-    plt.plot(v_t_s)
+    #plt.plot(v_t_s)
     #plt.xscale('log')
     plt.show()
