@@ -100,9 +100,9 @@ def parse_garch_coef(coef, p, model_type):
 
 
 def calc_weights_garch_with_trading_cost_multi_helper(Omega_t_plus_1, gamma_D=None):
-    Avv_guess = Omega_t_plus_1
+    Avv_guess = np.multiply(Omega_t_plus_1, 1e-5)
     Avv, Av1 = gu.calc_Avs(Omega_t=Omega_t_plus_1, gamma_D=gamma_D, Avv_guess=Avv_guess)
-    print("Solved Avv")
+    #print("Solved Avv")
     return Avv, Av1
 
 
