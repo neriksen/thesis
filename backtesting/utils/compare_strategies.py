@@ -11,7 +11,7 @@ def Lambda(Omega, gamma_D):
 
 
 def calc_turnover_pct(v_t, v_t_1, r_t):
-    TO = np.abs(v_t - np.divide(np.multiply(v_t_1, 1+r_t), 1+dot(v_t_1.T, r_t)))
+    TO = v_t - np.divide(np.multiply(v_t_1, 1+r_t), 1+dot(v_t_1.T, r_t))
     return TO
 
 
@@ -26,8 +26,9 @@ def clean_up_returns(series: pd.Series):
     return tmp
 
 
-def calc_transaction_costs(weights: pd.DataFrame, returns, Omega_ts, portfolio_value=1e9):
-    gamma_D = calibrate_trading_costs.get_gamma_D(portfolio_value)
+def calc_transaction_costs(weights: pd.DataFrame, returns, Omega_ts, portfolio_value=1e9, gamma_D=None):
+    if gamma_D is None:
+        gamma_D = calibrate_trading_costs.get_gamma_D("median")
     TC = np.zeros((len(weights)))
     avg_volume = calibrate_trading_costs.asset_lookup(list(returns.columns), col_lookup="Avg volume")
     avg_price = calibrate_trading_costs.asset_lookup(list(returns.columns), col_lookup="Avg price")
@@ -37,12 +38,12 @@ def calc_transaction_costs(weights: pd.DataFrame, returns, Omega_ts, portfolio_v
         if t >= 1:   # Only measureable from period t = 2, however Python is base 0 so t >= 2 becomes t >= 1
 
             TO = calc_turnover_pct(v_t, v_t_1, r_t)
-            positions_dollar = portfolio_value*v_t
-            amount_traded = np.reshape(positions_dollar * TO, avg_volume.shape)/avg_price
+            amount_traded = np.reshape(portfolio_value * TO, avg_volume.shape)/avg_price
             Lambda_t = Lambda(Omega_t, gamma_D)
-            relative_loss = mdot([amount_traded.T, Lambda_t, amount_traded])/portfolio_value  # Divide by port value to get relative loss
-            TC[t] = relative_loss
-            portfolio_return = (1+dot(v_t.T, r_t)-relative_loss)
+            dollar_transaction_costs = mdot([amount_traded.T, Lambda_t, amount_traded])
+            relative_transaction_costs = dollar_transaction_costs/portfolio_value  # Divide by port value to get relative loss
+            TC[t] = relative_transaction_costs
+            portfolio_return = (1+dot(v_t.T, r_t)-relative_transaction_costs)
             portfolio_value *= portfolio_return
 
     return TC
@@ -83,11 +84,10 @@ def performance_table(weights, returns_pct: pd.DataFrame, Omega_ts, portfolio_va
             next_weight = np.divide(np.multiply(v_t_1, (1+_return)), 1+dot(v_t_1.T, _return))
             BnH_weights.append(np.ravel(next_weight))
 
-    TC_BnH = calc_transaction_costs(pd.DataFrame(BnH_weights), returns, Omega_ts, portfolio_value)
     BnH_weights = np.array(BnH_weights)
     BnH_returns = np.multiply(BnH_weights, returns).sum(axis=1)
     cum_portfolio_returns['BnH'] = BnH_returns.add(1).cumprod()
-    cum_portfolio_returns['BnH TC'] = BnH_returns.sub(TC_BnH).add(1).cumprod()
+    cum_portfolio_returns['BnH TC'] = cum_portfolio_returns['BnH']
 
     # Formatting
     #cum_portfolio_returns.columns = ["GARCH", "GARCH TC", "Equal weight", "BnH"]
@@ -106,6 +106,7 @@ def performance_table(weights, returns_pct: pd.DataFrame, Omega_ts, portfolio_va
     ann_return = ((last_gross_return) ** (250/num_non_nan_periods))-1
     sharpe = ann_return.divide(std)
 
-    performance_table = pd.DataFrame([std, ann_return, sharpe]).transpose()
+    new_order = ['GARCH', 'Equal_weight', 'BnH', 'GARCH TC', 'Equal_weight TC', 'BnH TC']
+    performance_table = pd.DataFrame([std, ann_return, sharpe])[new_order].transpose()
     performance_table.columns = ["Ann. standard deviation", "Ann. return", "Ann. Sharpe ratio"]
     return cum_portfolio_returns, performance_table
