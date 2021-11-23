@@ -15,6 +15,7 @@ from calibrate_trading_costs import get_gamma_D
 pandas2ri.activate()
 import garch_utilites as gu
 from multiprocessing import Pool
+from itertools import starmap
 
 
 def download_return_data(tickers, start="2008-01-01", end="2021-10-02", save_to_csv=True):
@@ -101,6 +102,7 @@ def parse_garch_coef(coef, p, model_type):
 def calc_weights_garch_with_trading_cost_multi_helper(Omega_t_plus_1, gamma_D=None):
     Avv_guess = Omega_t_plus_1
     Avv, Av1 = gu.calc_Avs(Omega_t=Omega_t_plus_1, gamma_D=gamma_D, Avv_guess=Avv_guess)
+    print("Solved Avv")
     return Avv, Av1
 
 
@@ -116,7 +118,6 @@ def calc_weights_garch_with_trading_cost(Omega_t_plus1s, gamma_D=None):
     v_t_1 = v_1
     v_ts = []
 
-    Avv_guess = None    # First Avv_guess
     print(f"Solving problem with trading costs. gamma_D = {gamma_D}")
     # Calculate Avv and Av1 matricies for each Omega
     multi_args = [(Omega_t, gamma_D) for Omega_t in Omega_t_plus1s]
@@ -258,22 +259,22 @@ def test_gamma_D_params(tickers, start="2008-01-01", end="2021-10-02", number_of
     # Generating multiprocessing job:
     multi_args = [(gamma_D, Omega_ts, portfolio_value, tickers, out_of_sample) for gamma_D in gamma_Ds]
     # Generating weights
-    with Pool() as p:
-        sharpe_ratios = p.starmap(multiprocessing_helper, multi_args)
+    #with Pool() as p:
+    sharpe_ratios = list(starmap(multiprocessing_helper, multi_args))
 
     return sharpe_ratios
 
 
 if __name__ == '__main__':
     portfolio_value = 1e9
-    #sharpes = test_gamma_D_params(['EEM', 'IVV', 'IEV', 'IXN', 'IYR', 'IXG', 'EXI', 'GC=F', 'BZ=F', 'HYG', 'TLT']
-    #                              , number_of_out_of_sample_days=1000, model_type="sGARCH11",
-    #                                                                    portfolio_value=1e8,
-    #                              gamma_start=1e-7, gamma_end=0.1, gamma_num=50)
+    sharpes = test_gamma_D_params(['IVV', 'TLT']
+                                  , number_of_out_of_sample_days=1000, model_type="sGARCH11",
+                                                                        portfolio_value=1e9,
+                                  gamma_start=1e-7, gamma_end=1e-2, gamma_num=50)
     #v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['IVV', 'TLT', 'EEM'],
     #                                                      number_of_out_of_sample_days=1000, model_type="sGARCH11")
-    v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['EEM', 'IVV', 'IEV', 'IXN', 'IYR', 'IXG', 'EXI', 'GC=F', 'BZ=F', 'HYG', 'TLT'],
-                                                                        model_type="sGARCH10")
+    #v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['EEM', 'IVV', 'IEV', 'IXN', 'IYR', 'IXG', 'EXI', 'GC=F', 'BZ=F', 'HYG', 'TLT'],
+    #                                                                    model_type="sGARCH11")
     #
     # v_t.to_csv('v_t.csv')
     # out_of_sample.to_csv('out_of_sample.csv')
@@ -282,14 +283,14 @@ if __name__ == '__main__':
     # out_of_sample = pd.read_csv('out_of_sample.csv', index_col=0)
     # in_sample = pd.read_csv('in_sample.csv', index_col=0)
     #print(sharpes)
-    cum_returns, perf_table = performance_table(v_t_s, out_of_sample, Omega_ts, portfolio_value=portfolio_value)
-    print(perf_table)
-    # for sharpe in sharpes:
-    #     print(sharpe)
-    # sharpes = pd.DataFrame(sharpes, columns=['gamma_D', 'GARCH TC', 'Equal_weight TC', 'BnH TC'])
-    # sharpes.set_index('gamma_D', drop=True, inplace=True)
-    # plt.plot(sharpes)
-    plt.plot(cum_returns)
+    #cum_returns, perf_table = performance_table(v_t_s, out_of_sample, Omega_ts, portfolio_value=portfolio_value)
+    #print(perf_table)
+    for sharpe in sharpes:
+        print(sharpe)
+    sharpes = pd.DataFrame(sharpes, columns=['gamma_D', 'GARCH TC', 'Equal_weight TC', 'BnH TC'])
+    sharpes.set_index('gamma_D', drop=True, inplace=True)
+    plt.plot(sharpes)
+    #plt.plot(cum_returns)
     #plt.plot(v_t_s)
-    #plt.xscale('log')
+    plt.xscale('log')
     plt.show()
