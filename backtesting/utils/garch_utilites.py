@@ -157,7 +157,7 @@ def calc_Avs(Omega_t, gamma_D, Avv_guess):
 
 def calc_Av1():
     fraction = np.divide(2 * dot(Lambda_t, J_t_inv), mdot([ones.T, J_t_inv, ones]))
-    big_parenthesis = inv((1 - rho) ** (-1) - 2 * dot(Lambda_t, J_t_inv) - mdot([fraction, ones, ones.T, J_t_inv]))
+    big_parenthesis = inv((1 - rho) ** (-1) - 2 * dot(Lambda_t, J_t_inv) + mdot([fraction, ones, ones.T, J_t_inv]))
     Av1 = dot(big_parenthesis, fraction)
     return Av1
 
