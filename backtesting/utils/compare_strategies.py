@@ -26,19 +26,24 @@ def clean_up_returns(series: pd.Series):
     return tmp
 
 
-def calc_transaction_costs(weights: pd.DataFrame, returns, Omega_ts, portfolio_value=1e9, gamma_D=None):
-    if gamma_D is None:
-        gamma_D = calibrate_trading_costs.get_gamma_D("median")
-    TC = np.zeros((len(weights)))
-    avg_volume = calibrate_trading_costs.asset_lookup(list(returns.columns), col_lookup="Avg volume")
+def calc_transaction_costs(weights: pd.DataFrame, returns, Omega_ts, portfolio_value=1e9):
+    assert len(weights) == len(returns)+1
+    assert weights.iloc[[1]].index == returns.iloc[[0]].index
+    p = weights.shape[1]
+    gamma_D = calibrate_trading_costs.get_gamma_D("median")
+    TC = np.zeros((len(returns)))
     avg_price = calibrate_trading_costs.asset_lookup(list(returns.columns), col_lookup="Avg price")
-    for t, (v_t, v_t_1, Omega_t, r_t) in enumerate(zip(weights.iterrows(), weights.shift(1).iterrows(),
-                                                       Omega_ts, returns.shift(1).iterrows())):
-        v_t, v_t_1, r_t = v_t[1].values, v_t_1[1].values, r_t[1].values
-        if t >= 1:   # Only measureable from period t = 2, however Python is base 0 so t >= 2 becomes t >= 1
+
+    #v_t_1 = np.reshape(weights.iloc[[0]].values, (p, 1))
+    for t, (v_t, Omega_t, r_t) in enumerate(zip(weights.iterrows(), Omega_ts, returns.iterrows())):
+
+        v_t = np.reshape(v_t[1].values, (p, 1))
+        r_t = np.reshape(r_t[1].values, (p, 1))
+
+        if t >= 1:   # Only measureable from period t = 2
 
             TO = calc_turnover_pct(v_t, v_t_1, r_t)
-            amount_traded = np.reshape(portfolio_value * TO, avg_volume.shape)/avg_price
+            amount_traded = np.reshape(portfolio_value * TO, avg_price.shape)/avg_price
             Lambda_t = Lambda(Omega_t, gamma_D)
             dollar_transaction_costs = mdot([amount_traded.T, Lambda_t, amount_traded])
             relative_transaction_costs = dollar_transaction_costs/portfolio_value  # Divide by port value to get relative loss
@@ -46,18 +51,28 @@ def calc_transaction_costs(weights: pd.DataFrame, returns, Omega_ts, portfolio_v
             portfolio_return = (1+dot(v_t.T, r_t)-relative_transaction_costs)
             portfolio_value *= portfolio_return
 
+        v_t_1 = v_t
+
     return TC
 
 
 def performance_table(weights, returns_pct: pd.DataFrame, Omega_ts, portfolio_value=1e9) -> Tuple[pd.DataFrame, Any]:
     """
-    Function assumes weights start in period t-1 and returns_pct start in period t
+    Function assumes weights start in period T (last in-sample period)
+    and returns_pct start in period T+1 (first out-of-sample period)
     """
     p = weights.shape[1]
 
+    # Assert that we have one more weight than returns
+    assert len(weights) == len(returns_pct)+1
+    assert weights.iloc[[1]].index == returns_pct.iloc[[0]].index
+
+    # Delay weights to enable 1:1 multiplication with returns
+    delayed_weights = weights.shift(1).iloc[1:]
+
     # GARCH return
     returns = returns_pct.divide(100)
-    portfolio_returns = weights.multiply(returns).sum(axis=1).to_frame()
+    portfolio_returns = delayed_weights.multiply(returns).sum(axis=1).to_frame()
     portfolio_returns.columns = ['GARCH']
 
     # Calculate returns net transaction costs
@@ -65,16 +80,18 @@ def performance_table(weights, returns_pct: pd.DataFrame, Omega_ts, portfolio_va
     portfolio_returns['GARCH TC'] = portfolio_returns['GARCH']-TC_garch
 
     cum_portfolio_returns = portfolio_returns.add(1).cumprod()
-    TC_Equal_weight = calc_transaction_costs(pd.DataFrame(np.full(weights.shape, (1/p))), returns, Omega_ts, portfolio_value)
+
     # 1/N return
+    Equal_weights = pd.DataFrame(np.full(weights.shape, (1/p)), index=weights.index)
+    TC_Equal_weight = calc_transaction_costs(weights=Equal_weights, returns=returns,
+                                             Omega_ts=Omega_ts, portfolio_value=portfolio_value)
     cum_portfolio_returns['Equal_weight'] = returns.mean(axis=1).add(1).cumprod()
     cum_portfolio_returns['Equal_weight TC'] = returns.mean(axis=1).sub(TC_Equal_weight).add(1).cumprod()
 
 
     # Buy and hold GARCH firs (BnH)
     # Since turnover = |v_t - v_{t-1}*(1+r_t)|, then v_{t-1} = v_t/(1+r_t) when aiming for turnover = 0.
-
-    BnH_weights = []    # FIXME: Use empirical covariance of in-sample instead of Omega_t
+    BnH_weights = []
     for t, (_, _return) in enumerate(returns.shift(1).add(1).iterrows()):
         if t == 0:
             BnH_weights.append(weights.iloc[0].values)

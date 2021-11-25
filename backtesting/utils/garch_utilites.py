@@ -20,7 +20,9 @@ def main_loop(out_of_sample_returns, in_sample_returns, sigmas, epsilons, Qbar, 
     returns = out_of_sample_returns.append(last_in_sample)\
         .sort_index()
 
-    # First Omega forecast saved is Omega_{t+1|t}
+    # Let t+1 be first out-of-sample period
+    # Then the first Omega forecast saved is Omega_{t+1|T}, where T is the last in-sample period
+    # The forecast is constructed on T-measurable variables only, sigma, epsilon and r_t.
 
     for t, r_t in enumerate(returns.values):
         r_t = np.reshape(r_t, (p, 1))
