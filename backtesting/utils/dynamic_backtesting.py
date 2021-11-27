@@ -108,6 +108,8 @@ def numerical_solver_multi(Omega_t_plus_1, gamma_D):
 
 def calc_weights_loop(Avv, Av1, Omega_t_plus1s, tuning_gamma_D, out_of_sample_returns_pct):
     v_ts = []
+    aim_ts = []
+    modifiers = []
     p = len(Omega_t_plus1s[0])
     ones = np.ones((p, 1))
     out_of_sample_returns = out_of_sample_returns_pct.divide(100).shift(1, fill_value=0)
@@ -136,8 +138,10 @@ def calc_weights_loop(Avv, Av1, Omega_t_plus1s, tuning_gamma_D, out_of_sample_re
         v_t = v_t_1 + modifier
 
         v_ts.append(np.ravel(v_t))
+        aim_ts.append(np.ravel(aim_t))
+        modifiers.append(np.ravel(modifier))
         v_t_1 = v_t
-    return v_ts
+    return v_ts, aim_ts, modifiers
 
 
 def calc_weights_garch_with_trading_cost(Omega_t_plus1s, out_of_sample_returns_pct, tuning_gamma_D=None):
@@ -159,9 +163,9 @@ def calc_weights_garch_with_trading_cost(Omega_t_plus1s, out_of_sample_returns_p
 
     Avv = [x[0] for x in res]
     Av1 = [x[1] for x in res]
-    v_ts = calc_weights_loop(Avv, Av1, Omega_t_plus1s, tuning_gamma_D, out_of_sample_returns_pct)
+    v_ts , aim_ts, modifiers = calc_weights_loop(Avv, Av1, Omega_t_plus1s, tuning_gamma_D, out_of_sample_returns_pct)
 
-    return v_ts
+    return v_ts , aim_ts, modifiers
 
 
 def calc_weights_garch_no_trading_cost(Omega_ts):
@@ -251,7 +255,7 @@ def garch_with_trading_cost(tickers, start="2008-01-01", end="2021-10-02", numbe
     Omega_ts = calc_Omega_ts(out_of_sample_returns=out_of_sample, in_sample_returns=in_sample,
                              in_sample_sigmas=sigmas, in_sample_residuals=residuals, **params_dict)
     # Generating weights
-    v_t = calc_weights_garch_with_trading_cost(Omega_ts, out_of_sample, tuning_gamma_D=tuning_gamma_D)
+    v_t,_,_ = calc_weights_garch_with_trading_cost(Omega_ts, out_of_sample, tuning_gamma_D=tuning_gamma_D)
     # Construct index for weights that start in period T (last in-sample period)
     weight_index = in_sample.index[[-1]].union(out_of_sample.index)
     v_t = pd.DataFrame(v_t, columns=tickers, index=weight_index)
@@ -260,7 +264,7 @@ def garch_with_trading_cost(tickers, start="2008-01-01", end="2021-10-02", numbe
 
 
 def multiprocessing_helper(tuning_gamma_D, Omega_ts, portfolio_value, tickers, out_of_sample, in_sample, Avv, Av1):
-    v_t = calc_weights_loop(Avv, Av1, Omega_ts, tuning_gamma_D, out_of_sample)
+    v_t,_,_ = calc_weights_loop(Avv, Av1, Omega_ts, tuning_gamma_D, out_of_sample)
 
     weight_index = in_sample.index[[-1]].union(out_of_sample.index)
     v_t = pd.DataFrame(v_t, columns=tickers, index=weight_index)
