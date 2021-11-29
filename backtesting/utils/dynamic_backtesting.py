@@ -28,6 +28,10 @@ def download_return_data(tickers, start="2008-01-01", end="2021-10-02", save_to_
     return return_data
 
 
+def remove_Omega_timestamp(Omega_ts):
+    return [Omega[1] for Omega in Omega_ts]
+
+
 def split_sample(return_data, number_of_out_of_sample_days):
     out_of_sample = return_data.iloc[-number_of_out_of_sample_days:, ]
     in_sample = return_data.iloc[:-number_of_out_of_sample_days, ]
