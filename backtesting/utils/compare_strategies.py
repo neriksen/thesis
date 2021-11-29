@@ -4,7 +4,6 @@ import calibrate_trading_costs
 from typing import Tuple, Any
 from numpy.linalg import multi_dot as mdot
 from numpy import dot
-import datetime as dt
 
 
 def Lambda(Omega, gamma_D):
@@ -34,22 +33,19 @@ def calc_transaction_costs(weights: pd.DataFrame, returns, Omega_ts, portfolio_v
     gamma_D = calibrate_trading_costs.get_gamma_D("median")
     TC = np.zeros((len(returns)))
     avg_price = calibrate_trading_costs.asset_lookup(list(returns.columns), col_lookup="Avg price")
-    #v_t_1 = np.reshape(weights.iloc[[0]].values, (p, 1))
-    for t, (v_t, Omega_t, r_t) in enumerate(zip(weights.iterrows(), Omega_ts, returns.iterrows())):
+
+    for t, (v_t, Omega_t, r_t, r_t_1) in enumerate(zip(weights.iterrows(), Omega_ts, returns.shift(1, fill_value=0).iterrows(),
+                                                       returns.shift(2, fill_value=0).iterrows())):
 
         Omega_value = Omega_t[1]
-        #if r_t[0].date() == dt.date(2020, 3, 17):
-        #if t == 628:
-        #    print("stop")
 
         v_t_value = np.reshape(v_t[1].values, (p, 1))
         r_t_value = np.reshape(r_t[1].values, (p, 1))
-
-        #if r_t[0]
+        r_t_1_value = np.reshape(r_t_1[1].values, (p, 1))
 
         if t >= 1:   # Only measureable from period t = 2
 
-            TO = calc_turnover_pct(v_t_value, v_t_1, r_t_value)
+            TO = calc_turnover_pct(v_t_value, v_t_1, r_t_1_value)
             amount_traded = np.reshape(portfolio_value * TO, avg_price.shape)/avg_price
             Lambda_t = Lambda(Omega_value, gamma_D)
             dollar_transaction_costs = mdot([amount_traded.T, Lambda_t, amount_traded])

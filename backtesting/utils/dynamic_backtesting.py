@@ -15,7 +15,6 @@ from calibrate_trading_costs import get_gamma_D
 pandas2ri.activate()
 import garch_utilites as gu
 from multiprocessing import Pool
-from itertools import starmap
 
 
 def download_return_data(tickers, start="2008-01-01", end="2021-10-02", save_to_csv=True):
@@ -106,7 +105,6 @@ def parse_garch_coef(coef, p, model_type):
 def numerical_solver_multi(Omega_t_plus_1, gamma_D):
     Avv_guess = np.multiply(Omega_t_plus_1, 1e-7)
     Avv, Av1 = gu.calc_Avs(Omega_t=Omega_t_plus_1, gamma_D=gamma_D, Avv_guess=Avv_guess)
-    #print("Solved Avv")
     return Avv, Av1
 
 
@@ -116,34 +114,34 @@ def calc_weights_loop(Avv, Av1, Omega_t_plus1s, tuning_gamma_D, out_of_sample_re
     modifiers = []
     p = len(Omega_t_plus1s[0][1])
     ones = np.ones((p, 1))
-    out_of_sample_returns = out_of_sample_returns_pct.divide(100).shift(1, fill_value=0)
+    out_of_sample_returns = out_of_sample_returns_pct.divide(100)
 
     # Let the first weight in period T (last out-of-sample period) be similar to garch_no_trading costs:
     v_1 = divide(dot(inv(Omega_t_plus1s[0][1]), ones), mdot([ones.T, inv(Omega_t_plus1s[0][1]), ones]))
     v_ts.append(np.ravel(v_1))
     v_t_1 = v_1
-    for t, (Omega, Avv, Av1, r_t) in enumerate(zip(Omega_t_plus1s, Avv, Av1, out_of_sample_returns.iterrows())):
+    for t, (Omega, Avv, Av1) in enumerate(zip(Omega_t_plus1s, Avv, Av1)):
         # It is crucial that r_t is in the same period as v_t because we adjust v_{t-1} to include the return of r_t
         # The resulting list of weights begins in period T and ends in M
 
         Omega_value = Omega[1]
-        r_t = np.reshape(r_t[1].values, (p, 1))
-        #print(t)
-        #if t == 628:
-        #    print("stop")
-
+        if t != 0:
+            r_t = out_of_sample_returns.iloc[t-1]
+            r_t_value = np.reshape(r_t.values, (p, 1))
+        else:
+            # Because we don't have any return for period T since the portfolio is first established at end of day
+            # on the first day the portfolio is constructed
+            r_t_value = np.zeros((p, 1))
 
         # First weight calculated here is for period T+1, so what the investor rebalances to
         # at the end of day T+1, ie. the first day where the strategy is live
         aim_t = mdot([inv(Avv), Av1, ones])
         aim_t = aim_t/np.sum(aim_t)
 
-        #aims_no_trans.append(np.ravel(divide(dot(inv(Omega), ones), mdot([ones.T, inv(Omega), ones]))))
-        #aims.append(np.ravel(aim_t))
-
-        v_t_1_mod = np.divide(np.multiply(v_t_1, 1+r_t), 1+dot(v_t_1.T, r_t))
+        v_t_1_mod = np.divide(np.multiply(v_t_1, 1+r_t_value), 1+dot(v_t_1.T, r_t_value))
         modifier = mdot([inv(tuning_gamma_D*Omega_value), Avv, (v_t_1_mod-aim_t)])
-        v_t = v_t_1 + modifier
+        v_t = v_t_1_mod + modifier
+        v_t = v_t/np.sum(v_t)
 
         v_ts.append(np.ravel(v_t))
         aim_ts.append(np.ravel(aim_t))
@@ -163,7 +161,7 @@ def calc_weights_garch_with_trading_cost(Omega_t_plus1s, out_of_sample_returns_p
     if tuning_gamma_D is None:
         tuning_gamma_D = gamma_D
 
-    print(f"Solving problem with trading costs. gamma_D = {gamma_D}")
+    print(f"Solving problem with trading costs. gamma_D = {gamma_D}, tuning gamma_D = {tuning_gamma_D}")
     # Calculate Avv and Av1 matricies for each Omega
     Omega_values = remove_Omega_timestamp(Omega_t_plus1s)
     multi_args = [(Omega, gamma_D) for Omega in Omega_values]
@@ -274,7 +272,7 @@ def garch_with_trading_cost(tickers, start="2008-01-01", end="2021-10-02", numbe
 
 
 def multiprocessing_helper(tuning_gamma_D, Omega_ts, portfolio_value, tickers, out_of_sample, in_sample, Avv, Av1):
-    v_t,_,_ = calc_weights_loop(Avv, Av1, Omega_ts, tuning_gamma_D, out_of_sample)
+    v_t,_,_ = calc_weights_loop(Avv=Avv, Av1=Av1, Omega_t_plus1s=Omega_ts, tuning_gamma_D=tuning_gamma_D, out_of_sample_returns_pct=out_of_sample)
 
     weight_index = in_sample.index[[-1]].union(out_of_sample.index)
     v_t = pd.DataFrame(v_t, columns=tickers, index=weight_index)
@@ -286,7 +284,7 @@ def multiprocessing_helper(tuning_gamma_D, Omega_ts, portfolio_value, tickers, o
     std = perf_table.loc[['GARCH TC', 'Equal_weight TC', 'BnH TC']][['Ann. standard deviation']].values
     std = np.append(np.array([[tuning_gamma_D]]), std)
 
-    print(std)
+    print(sharpe)
     return sharpe, std
 
 
@@ -308,7 +306,8 @@ def test_gamma_D_params(tickers, start="2008-01-01", end="2021-10-02", number_of
                              in_sample_sigmas=sigmas, in_sample_residuals=residuals, **params_dict)
     # Generating arguments for list comprehension:
     gamma_D = get_gamma_D("median")
-    multi_args = [(Omega_t, gamma_D) for Omega_t in Omega_ts]
+    Omega_t_values = remove_Omega_timestamp(Omega_ts)
+    multi_args = [(Omega_t, gamma_D) for Omega_t in Omega_t_values]
     with Pool() as multi:
         res = multi.starmap(numerical_solver_multi, multi_args)
 
@@ -332,13 +331,13 @@ if __name__ == '__main__':
     #                              , number_of_out_of_sample_days=1000, model_type="sGARCH11",
     #                                                                    portfolio_value=1e8,
     #                              gamma_start=1e-7, gamma_end=1e-2, gamma_num=40)
-    sharpes, std = test_gamma_D_params(['EEM', 'IVV', 'IEV', 'IXN', 'TLT']
-                                  , number_of_out_of_sample_days=1000, model_type="sGARCH11",
-                                                                        portfolio_value=1e9,
-                                  gamma_start=7e-7, gamma_end=5e-2, gamma_num=900)
-                                  #gamma_start=1e-3, gamma_end=1e10, gamma_num=300)
+    sharpes, std = test_gamma_D_params(['EEM', 'IVV', 'IEV', 'IXN', 'IYR', 'IXG', 'EXI', 'GC=F', 'BZ=F', 'HYG', 'TLT']
+                                 , number_of_out_of_sample_days=1000, model_type="sGARCH11",
+                                                                       portfolio_value=1e9,
+                                 gamma_start=1e-7, gamma_end=1, gamma_num=150)
+    #                               #gamma_start=1e-3, gamma_end=1e10, gamma_num=300)
     #v_t_s, out_of_sample, in_sample, Omega_ts = garch_no_trading_cost(['EEM', 'IVV', 'IEV', 'IXN', 'TLT'])
-    #v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['EEM', 'IVV', 'IEV', 'IXN', 'TLT'])
+    #v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['EEM', 'IVV', 'IEV', 'IXN', 'IYR', 'IXG', 'EXI', 'GC=F', 'BZ=F', 'HYG', 'TLT'], tuning_gamma_D=1e-5)
     #v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['EEM', 'IVV', 'IEV', 'IXN', 'TLT'])
 
     sharpe = True
@@ -354,7 +353,9 @@ if __name__ == '__main__':
         sharpes = pd.DataFrame(sharpes, columns=['gamma_D', 'GARCH TC', 'Equal_weight TC', 'BnH TC'])
         std = pd.DataFrame(std, columns=['gamma_D', 'GARCH TC', 'Equal_weight TC', 'BnH TC'])
         std.set_index('gamma_D', drop=True, inplace=True)
+        sharpes.set_index('gamma_D', drop=True, inplace=True)
+        #plt.plot(sharpes, linestyle="--")
         plt.plot(std)
         plt.xscale('log')
-        plt.yscale('log')
+        #plt.yscale('log')
         plt.show()
