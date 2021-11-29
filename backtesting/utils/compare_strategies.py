@@ -92,10 +92,10 @@ def performance_table(weights, returns_pct: pd.DataFrame, Omega_ts, portfolio_va
     cum_portfolio_returns['Equal_weight TC'] = returns.mean(axis=1).sub(TC_Equal_weight).add(1).cumprod()
 
 
-    # Buy and hold GARCH firs (BnH)
+    # GARCH is first weight in Buy and hold  (BnH)
     # Since turnover = |v_t - v_{t-1}*(1+r_t)|, then v_{t-1} = v_t/(1+r_t) when aiming for turnover = 0.
-    BnH_weights = []
-    for t, (_, _return) in enumerate(returns.shift(1).add(1).iterrows()):
+    BnH_weights = [weights.iloc[0].values]
+    for t, (_, _return) in enumerate(returns.shift(1, fill_value=0).iterrows()):
         if t == 0:
             BnH_weights.append(weights.iloc[0].values)
         else:
@@ -104,8 +104,10 @@ def performance_table(weights, returns_pct: pd.DataFrame, Omega_ts, portfolio_va
             next_weight = np.divide(np.multiply(v_t_1, (1+_return)), 1+dot(v_t_1.T, _return))
             BnH_weights.append(np.ravel(next_weight))
 
-    BnH_weights = np.array(BnH_weights)
-    BnH_returns = np.multiply(BnH_weights, returns).sum(axis=1)
+    # Delay weights to enable 1:1 multiplication with returns
+    BnH_weights = pd.DataFrame(np.array(BnH_weights), index=weights.index)
+    delayed_BnH_weights = BnH_weights.shift(1).iloc[1:]
+    BnH_returns = np.multiply(delayed_BnH_weights, returns).sum(axis=1)
     cum_portfolio_returns['BnH'] = BnH_returns.add(1).cumprod()
     cum_portfolio_returns['BnH TC'] = cum_portfolio_returns['BnH']
 
