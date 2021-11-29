@@ -58,6 +58,10 @@ def main_loop(out_of_sample_returns, in_sample_returns, sigmas, epsilons, Qbar, 
         if t == periods_to_run:     # Quit one period before loop runs out. No reason to calc Omega_t+1 for last return
             break
 
+    # Time index for Omega_ts is the same as returns out of sample
+    # We define the timestamp as t+1 when Omega = Omega_{t+1|T}
+    Omega_ts = [(ind, Omega) for ind, Omega in zip(out_of_sample_returns.index, Omega_ts)]
+
     return Omega_ts
 
 

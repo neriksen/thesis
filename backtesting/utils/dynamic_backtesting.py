@@ -114,20 +114,24 @@ def calc_weights_loop(Avv, Av1, Omega_t_plus1s, tuning_gamma_D, out_of_sample_re
     v_ts = []
     aim_ts = []
     modifiers = []
-    p = len(Omega_t_plus1s[0])
+    p = len(Omega_t_plus1s[0][1])
     ones = np.ones((p, 1))
     out_of_sample_returns = out_of_sample_returns_pct.divide(100).shift(1, fill_value=0)
 
     # Let the first weight in period T (last out-of-sample period) be similar to garch_no_trading costs:
-    v_1 = divide(dot(inv(Omega_t_plus1s[0]), ones), mdot([ones.T, inv(Omega_t_plus1s[0]), ones]))
+    v_1 = divide(dot(inv(Omega_t_plus1s[0][1]), ones), mdot([ones.T, inv(Omega_t_plus1s[0][1]), ones]))
     v_ts.append(np.ravel(v_1))
     v_t_1 = v_1
     for t, (Omega, Avv, Av1, r_t) in enumerate(zip(Omega_t_plus1s, Avv, Av1, out_of_sample_returns.iterrows())):
         # It is crucial that r_t is in the same period as v_t because we adjust v_{t-1} to include the return of r_t
         # The resulting list of weights begins in period T and ends in M
 
+        Omega_value = Omega[1]
         r_t = np.reshape(r_t[1].values, (p, 1))
         #print(t)
+        #if t == 628:
+        #    print("stop")
+
 
         # First weight calculated here is for period T+1, so what the investor rebalances to
         # at the end of day T+1, ie. the first day where the strategy is live
@@ -137,8 +141,8 @@ def calc_weights_loop(Avv, Av1, Omega_t_plus1s, tuning_gamma_D, out_of_sample_re
         #aims_no_trans.append(np.ravel(divide(dot(inv(Omega), ones), mdot([ones.T, inv(Omega), ones]))))
         #aims.append(np.ravel(aim_t))
 
-        v_t_1 = np.divide(np.multiply(v_t_1, 1+r_t), 1+dot(v_t_1.T, r_t))
-        modifier = mdot([inv(tuning_gamma_D*Omega), Avv, (v_t_1-aim_t)])
+        v_t_1_mod = np.divide(np.multiply(v_t_1, 1+r_t), 1+dot(v_t_1.T, r_t))
+        modifier = mdot([inv(tuning_gamma_D*Omega_value), Avv, (v_t_1_mod-aim_t)])
         v_t = v_t_1 + modifier
 
         v_ts.append(np.ravel(v_t))
@@ -161,7 +165,8 @@ def calc_weights_garch_with_trading_cost(Omega_t_plus1s, out_of_sample_returns_p
 
     print(f"Solving problem with trading costs. gamma_D = {gamma_D}")
     # Calculate Avv and Av1 matricies for each Omega
-    multi_args = [(Omega_t, gamma_D) for Omega_t in Omega_t_plus1s]
+    Omega_values = remove_Omega_timestamp(Omega_t_plus1s)
+    multi_args = [(Omega, gamma_D) for Omega in Omega_values]
     with Pool() as multi:
         res = multi.starmap(numerical_solver_multi, multi_args)
 
@@ -174,10 +179,11 @@ def calc_weights_garch_with_trading_cost(Omega_t_plus1s, out_of_sample_returns_p
 
 def calc_weights_garch_no_trading_cost(Omega_ts):
     assert isinstance(Omega_ts, (list, np.ndarray))
-    p = len(Omega_ts[0])
+    Omega_values = remove_Omega_timestamp(Omega_ts)
+    p = len(Omega_values[0])
     ones = np.ones((p, 1))
-    v_t = [np.ravel(divide(dot(inv(Omega_ts[0]), ones), mdot([ones.T, inv(Omega_ts[0]), ones])))] # Add first weight twice to adhere to standard in garch with trading cost
-    for Omega in Omega_ts:
+    v_t = [np.ravel(divide(dot(inv(Omega_values[0]), ones), mdot([ones.T, inv(Omega_values[0]), ones])))] # Add first weight twice to adhere to standard in garch with trading cost
+    for Omega in Omega_values:
         v_t.append(np.ravel(divide(dot(inv(Omega), ones), mdot([ones.T, inv(Omega), ones]))))
     return v_t
 
