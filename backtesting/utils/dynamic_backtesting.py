@@ -10,6 +10,7 @@ import os
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
 from rpy2.robjects import IntVector
+from rpy2.robjects import StrVector
 from compare_strategies import performance_table
 from calibrate_trading_costs import get_gamma_D
 pandas2ri.activate()
@@ -17,14 +18,14 @@ import garch_utilites as gu
 from multiprocessing import Pool
 
 
-def download_return_data(tickers, start="2008-01-01", end="2021-10-02", save_to_csv=True):
-    return_data = yfinance.download(tickers, start=start, end=end)['Adj Close']
-    return_data = return_data/return_data.iloc[0]
-    return_data = return_data.pct_change().iloc[1:]*100
-    return_data = return_data[tickers]
-    if save_to_csv:
-        return_data.to_csv(os.path.join(os.path.dirname(__file__), '../../data/return_data.csv'), sep=";")
-    return return_data
+# def download_return_data(tickers, start="2008-01-01", end="2021-10-02", save_to_csv=True):
+#     return_data = yfinance.download(tickers, start=start, end=end)['Adj Close']
+#     return_data = return_data/return_data.iloc[0]
+#     return_data = return_data.pct_change().iloc[1:]*100
+#     return_data = return_data[tickers]
+#     if save_to_csv:
+#         return_data.to_csv(os.path.join(os.path.dirname(__file__), '../../data/return_data.csv'), sep=";")
+#     return return_data
 
 
 def remove_Omega_timestamp(Omega_ts):
@@ -37,12 +38,13 @@ def split_sample(return_data, number_of_out_of_sample_days):
     return out_of_sample, in_sample
 
 
-def fit_garch_model(len_out_of_sample=0, ugarch_model="sGARCH", garch_order=(1, 1)):
+def fit_garch_model(tickers, len_out_of_sample=0, ugarch_model="sGARCH", garch_order=(1, 1)):
     """
     ugarch_model: One of "sGARCH", "gjrGARCH", not implemented: "eGARCH"
     garch_order: Default: (1, 1)
     """
     assert (ugarch_model in ("sGARCH", "gjrGARCH"))
+    tickers = StrVector(tickers)
     garch_order = IntVector(garch_order)
     # Define the R script and load the instance in Python
     r = ro.r
@@ -51,7 +53,7 @@ def fit_garch_model(len_out_of_sample=0, ugarch_model="sGARCH", garch_order=(1, 
     fit_mgarch_r = ro.globalenv['fit_mgarch']
     # Fit the MGARCH model and receive the result
     ugarch_dist_model = "std"       # t-distribution for the individual models
-    coef, residuals, sigmas = fit_mgarch_r(len_out_of_sample, ugarch_model, ugarch_dist_model, garch_order)
+    coef, residuals, sigmas = fit_mgarch_r(tickers, len_out_of_sample, ugarch_model, ugarch_dist_model, garch_order)
     return coef, residuals, sigmas
 
 
@@ -196,7 +198,7 @@ def calc_Omega_ts(out_of_sample_returns, in_sample_returns, in_sample_sigmas, in
 
 
 def unconditional_weights(tickers, start="2008-01-01", end="2021-10-02", number_of_out_of_sample_days=250*4):
-    return_data=download_return_data(tickers, start, end, save_to_csv=True)
+    return_data = pd.read_csv('../../data/return_data_stable.csv', sep=";", index_col=0).loc[start:end, tickers]
     out_of_sample, _ = split_sample(return_data, number_of_out_of_sample_days)
     Omega_uncond=out_of_sample.cov() #Use only the sample that we ant to test on
     ones = np.ones((len(Omega_uncond), 1))
@@ -210,7 +212,7 @@ def split_fit_parse(tickers, start, end, number_of_out_of_sample_days, model_typ
     garch_type = model_type[:-2]
     garch_order = IntVector((model_type[-2], model_type[-1]))
 
-    return_data = download_return_data(tickers, start, end, True)
+    return_data = pd.read_csv('../../data/return_data_stable.csv', sep=";", index_col=0).loc[start:end, tickers]
 
     # Determining dimensions
     T, p = return_data.shape
@@ -218,7 +220,7 @@ def split_fit_parse(tickers, start, end, number_of_out_of_sample_days, model_typ
                                             number_of_out_of_sample_days=number_of_out_of_sample_days)
 
     # Fit model
-    coef, residuals, sigmas = fit_garch_model(len_out_of_sample=number_of_out_of_sample_days,
+    coef, residuals, sigmas = fit_garch_model(tickers=tickers, len_out_of_sample=number_of_out_of_sample_days,
                                               ugarch_model=garch_type, garch_order=garch_order)
 
     # Parse variables
@@ -271,18 +273,18 @@ def garch_with_trading_cost(tickers, start="2008-01-01", end="2021-10-02", numbe
     return v_t, out_of_sample, in_sample, Omega_ts
 
 
-def multiprocessing_helper(tuning_gamma_D, Omega_ts, portfolio_value, tickers, out_of_sample, in_sample, Avv, Av1):
-    v_t,_,_ = calc_weights_loop(Avv=Avv, Av1=Av1, Omega_t_plus1s=Omega_ts, tuning_gamma_D=tuning_gamma_D, out_of_sample_returns_pct=out_of_sample)
+def multiprocessing_helper(gamma_D_tuning, Omega_ts, portfolio_value, tickers, out_of_sample, in_sample, Avv, Av1):
+    v_t,_,_ = calc_weights_loop(Avv=Avv, Av1=Av1, Omega_t_plus1s=Omega_ts, tuning_gamma_D=gamma_D_tuning, out_of_sample_returns_pct=out_of_sample)
 
     weight_index = in_sample.index[[-1]].union(out_of_sample.index)
     v_t = pd.DataFrame(v_t, columns=tickers, index=weight_index)
     cum_returns, perf_table = performance_table(weights=v_t, returns_pct=out_of_sample, Omega_ts=Omega_ts,
                                                 portfolio_value=portfolio_value)
     sharpe = perf_table.loc[['GARCH TC', 'Equal_weight TC', 'BnH TC']][['Ann. Sharpe ratio']].values
-    sharpe = np.append(np.array([[tuning_gamma_D]]), sharpe)
+    sharpe = np.append(np.array([[gamma_D_tuning]]), sharpe)
 
     std = perf_table.loc[['GARCH TC', 'Equal_weight TC', 'BnH TC']][['Ann. standard deviation']].values
-    std = np.append(np.array([[tuning_gamma_D]]), std)
+    std = np.append(np.array([[gamma_D_tuning]]), std)
 
     print(sharpe)
     return sharpe, std
@@ -299,6 +301,7 @@ def test_gamma_D_params(tickers, start="2008-01-01", end="2021-10-02", number_of
     model_type: One of "sGARCH11", "sGARCH10", "gjrGARCH11", not implemented = "eGARCH11"
     """
     assert (model_type in ("sGARCH11", "sGARCH10", "gjrGARCH11"))
+
     out_of_sample, in_sample, sigmas, residuals, params_dict = split_fit_parse(tickers, start, end,
                                                                                number_of_out_of_sample_days, model_type)
 
@@ -327,20 +330,20 @@ def test_gamma_D_params(tickers, start="2008-01-01", end="2021-10-02", number_of
 
 if __name__ == '__main__':
     portfolio_value = 1e9
-    #sharpes = test_gamma_D_params(['EEM', 'IVV', 'IEV', 'IXN', 'TLT']
-    #                              , number_of_out_of_sample_days=1000, model_type="sGARCH11",
-    #                                                                    portfolio_value=1e8,
-    #                              gamma_start=1e-7, gamma_end=1e-2, gamma_num=40)
-    sharpes, std = test_gamma_D_params(['EEM', 'IVV', 'IEV', 'IXN', 'IYR', 'IXG', 'EXI', 'GC=F', 'BZ=F', 'HYG', 'TLT']
-                                 , number_of_out_of_sample_days=1000, model_type="sGARCH11",
-                                                                       portfolio_value=1e9,
-                                 gamma_start=1e-7, gamma_end=1, gamma_num=150)
+    #sharpes, std = test_gamma_D_params(['HYG','TLT']
+    #                             , number_of_out_of_sample_days=1000,
+    #                             gamma_start=3e-5, gamma_end=1e-2, gamma_num=100)
+    #sharpes, std = test_gamma_D_params(['EEM', 'IVV', 'IEV', 'IXN', 'IYR', 'IXG', 'EXI', 'GC=F', 'BZ=F', 'HYG', 'TLT']
+    # sharpes, std = test_gamma_D_params(['EEM', 'IVV', 'IEV', 'IXN', 'TLT'],
+    #                                    number_of_out_of_sample_days=1000, model_type="sGARCH10",
+    #                                                                    portfolio_value=1e9,
+    #                              gamma_start=1e-6, gamma_end=1e-2, gamma_num=150)
     #                               #gamma_start=1e-3, gamma_end=1e10, gamma_num=300)
     #v_t_s, out_of_sample, in_sample, Omega_ts = garch_no_trading_cost(['EEM', 'IVV', 'IEV', 'IXN', 'TLT'])
-    #v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['EEM', 'IVV', 'IEV', 'IXN', 'IYR', 'IXG', 'EXI', 'GC=F', 'BZ=F', 'HYG', 'TLT'], tuning_gamma_D=1e-5)
-    #v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['EEM', 'IVV', 'IEV', 'IXN', 'TLT'])
+    v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['HYG', 'TLT'], number_of_out_of_sample_days=1000, tuning_gamma_D=0.00015511818625173554)
+    #v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['EEM', 'IVV', 'IEV', 'IXN', 'TLT'], model_type="sGARCH11")
 
-    sharpe = True
+    sharpe = False
     if sharpe == False:
         cum_returns, perf_table = performance_table(v_t_s, out_of_sample, Omega_ts, portfolio_value=portfolio_value)
         print(perf_table)
@@ -357,5 +360,5 @@ if __name__ == '__main__':
         #plt.plot(sharpes, linestyle="--")
         plt.plot(std)
         plt.xscale('log')
-        #plt.yscale('log')
+        plt.yscale('log')
         plt.show()
