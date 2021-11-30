@@ -16,9 +16,22 @@ from calibrate_trading_costs import get_gamma_D
 pandas2ri.activate()
 import garch_utilites as gu
 from multiprocessing import Pool
+import datetime as dt
+import yfinance
+
+
+def download_return_data_old(tickers, start="2008-01-01", end="2021-10-02", save_to_csv=True):
+    return_data = yfinance.download(tickers, start=start, end=end)['Adj Close']
+    return_data = return_data/return_data.iloc[0]
+    return_data = return_data.pct_change().iloc[1:]*100
+    return_data = return_data[tickers]
+    if save_to_csv:
+        return_data.to_csv("../../data/return_data.csv", sep=";")
+    return return_data
 
 
 def download_return_data(tickers, start="2008-01-01", end="2021-10-02"):
+    #start = (dt.datetime.strptime(start, "%Y-%m-%d")+dt.timedelta(1)).strftime("%Y-%m-%d")
     path = str(os.path.join(os.path.dirname(__file__), '../../data/return_data_stable.csv'))
     return pd.read_csv(path, sep=";", index_col=0).loc[start:end, tickers]
 
@@ -328,14 +341,14 @@ if __name__ == '__main__':
     #sharpes, std = test_gamma_D_params(['HYG','TLT']
     #                             , number_of_out_of_sample_days=1000,
     #                             gamma_start=3e-5, gamma_end=1e-2, gamma_num=100)
-    #sharpes, std = test_gamma_D_params(['EEM', 'IVV', 'IEV', 'IXN', 'IYR', 'IXG', 'EXI', 'GC=F', 'BZ=F', 'HYG', 'TLT']
+    #sharpes, std = test_gamma_D_params(['EEM', 'IVV', 'IEV', 'IXN', 'IYR', 'IXG', 'EXI', 'GCF', 'BZF', 'HYG', 'TLT']
     # sharpes, std = test_gamma_D_params(['EEM', 'IVV', 'IEV', 'IXN', 'TLT'],
     #                                    number_of_out_of_sample_days=1000, model_type="sGARCH10",
     #                                                                    portfolio_value=1e9,
     #                              gamma_start=1e-6, gamma_end=1e-2, gamma_num=150)
     #                               #gamma_start=1e-3, gamma_end=1e10, gamma_num=300)
     #v_t_s, out_of_sample, in_sample, Omega_ts = garch_no_trading_cost(['EEM', 'IVV', 'IEV', 'IXN', 'TLT'])
-    v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['HYG', 'TLT'], number_of_out_of_sample_days=1000, tuning_gamma_D=0.00015511818625173554)
+    v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['EEM', 'IVV', 'IEV', 'IXN', 'IYR', 'IXG', 'EXI', 'GCF', 'BZF', 'HYG', 'TLT'], tuning_gamma_D=1e-4, number_of_out_of_sample_days=1000)
     #v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['EEM', 'IVV', 'IEV', 'IXN', 'TLT'], model_type="sGARCH11")
 
     sharpe = False

@@ -55,7 +55,7 @@ def main():
               "TLT": "20+ Year Treasury Bonds"}
     tickers = list(assets.keys())
     asset_names = list(assets.values())
-    return_data = db.download_return_data(tickers, save_to_csv=True)
+    return_data = db.download_return_data(tickers)
     coef_ARCH, residuals_ARCH, sigmas_ARCH = GARCH_MODEL("sGARCH", (1, 0))
     irf_weights_ARCH, irf_omega_s = IRF_maker("sGARCH10", 10000, 1, 15, coef_ARCH, residuals_ARCH, sigmas_ARCH, asset_names)
 

@@ -173,13 +173,14 @@ def calc_Avv(Omega_t, Avv_guess):
         Avv_guess = np.full((p, p), 1/p)
     # Numerical solver for Avv
     options = {"maxiter": 4000, "ftol": 11e-13}
-    res =minimize(fun = compare_sides,
+    res =minimize(fun=compare_sides,
                   args=(Omega_t),
-            method = 'SLSQP',
-            x0=Avv_guess,
-            options = options,
-            tol = 1e-13)
+                  method='SLSQP',
+                  x0=Avv_guess,
+                  options=options,
+                  tol=1e-13)
 
+    # Enforce symmetric Avv matrix
     Avv = np.reshape(res.x, (p, p))
     Avv = np.triu(Avv)
     Avv = Avv.T + Avv - np.diag(np.diag(Avv))
@@ -190,7 +191,7 @@ def compare_sides(Avv, Omega_t):
     global J_t_inv
     Avv = np.reshape(Avv, (p, p))
     Avv = np.triu(Avv)
-    Avv = Avv.T + Avv - np.diag(np.diag(Avv))    # Enforcing a diagonal
+    Avv = Avv.T + Avv - np.diag(np.diag(Avv))    # Enforcing symmetric Avv matrix
     J_t_inv = inv(Omega_t + Avv + Lambda_t)
     Left = LHS(Avv)
     Right = RHS()

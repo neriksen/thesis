@@ -11,14 +11,14 @@ def calc_gammaD():
               "IYR": "US Real Estate",
               "IXG": "Global Financials",
               "EXI": "Global Industrials",
-              "GC=F": "Gold Futures",
-              "BZ=F": "Brent Crude Oil Futures",
+              "GCF": "Gold Futures",
+              "BZF": "Brent Crude Oil Futures",
               "HYG": "High-Yield Corporate Bonds",
               "TLT": "20+ Year Treasury Bonds"}
     tickers = list(assets.keys())
 
     data = yf.download(tickers, start="2008-01-01", end="2017-10-11")
-    data.loc[:, ('Volume', ['BZ=F', 'GC=F'])] *= 100     # To account for contract size of 100 on futures
+    data.loc[:, ('Volume', ['BZF', 'GCF'])] *= 100     # To account for contract size of 100 on futures
     avgvol_std = pd.concat([data['Volume'].mean(),
                             data['Adj Close'].mean(),
                             data['Adj Close'].pct_change().var(),
