@@ -1,3 +1,5 @@
+import sys
+
 import numpy as np
 from numpy import divide
 from numpy.linalg import multi_dot as mdot
@@ -5,7 +7,6 @@ from numpy.linalg import inv
 from numpy import dot
 import matplotlib.pyplot as plt
 import pandas as pd
-import yfinance
 import os
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
@@ -19,7 +20,11 @@ from multiprocessing import Pool
 
 
 def download_return_data(tickers, start="2008-01-01", end="2021-10-02"):
-    return pd.read_csv('../../data/return_data_stable.csv', sep=";", index_col=0).loc[start:end, tickers]
+    if sys.platform == "darwin":
+        path = '../../data/return_data_stable.csv'
+    else:
+        path = r'..\..\data/return_data_stable.csv'
+    return pd.read_csv(path, sep=";", index_col=0).loc[start:end, tickers]
 
 
 def remove_Omega_timestamp(Omega_ts):
