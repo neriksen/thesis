@@ -18,14 +18,8 @@ import garch_utilites as gu
 from multiprocessing import Pool
 
 
-# def download_return_data(tickers, start="2008-01-01", end="2021-10-02", save_to_csv=True):
-#     return_data = yfinance.download(tickers, start=start, end=end)['Adj Close']
-#     return_data = return_data/return_data.iloc[0]
-#     return_data = return_data.pct_change().iloc[1:]*100
-#     return_data = return_data[tickers]
-#     if save_to_csv:
-#         return_data.to_csv(os.path.join(os.path.dirname(__file__), '../../data/return_data.csv'), sep=";")
-#     return return_data
+def download_return_data(tickers, start="2008-01-01", end="2021-10-02"):
+    return pd.read_csv('../../data/return_data_stable.csv', sep=";", index_col=0).loc[start:end, tickers]
 
 
 def remove_Omega_timestamp(Omega_ts):
@@ -198,7 +192,7 @@ def calc_Omega_ts(out_of_sample_returns, in_sample_returns, in_sample_sigmas, in
 
 
 def unconditional_weights(tickers, start="2008-01-01", end="2021-10-02", number_of_out_of_sample_days=250*4):
-    return_data = pd.read_csv('../../data/return_data_stable.csv', sep=";", index_col=0).loc[start:end, tickers]
+    return_data = download_return_data(tickers, start, end)
     out_of_sample, _ = split_sample(return_data, number_of_out_of_sample_days)
     Omega_uncond=out_of_sample.cov() #Use only the sample that we ant to test on
     ones = np.ones((len(Omega_uncond), 1))
@@ -212,7 +206,7 @@ def split_fit_parse(tickers, start, end, number_of_out_of_sample_days, model_typ
     garch_type = model_type[:-2]
     garch_order = IntVector((model_type[-2], model_type[-1]))
 
-    return_data = pd.read_csv('../../data/return_data_stable.csv', sep=";", index_col=0).loc[start:end, tickers]
+    return_data = download_return_data(tickers, start, end)
 
     # Determining dimensions
     T, p = return_data.shape
