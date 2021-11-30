@@ -1,5 +1,4 @@
 import sys
-
 import numpy as np
 from numpy import divide
 from numpy.linalg import multi_dot as mdot
@@ -20,10 +19,7 @@ from multiprocessing import Pool
 
 
 def download_return_data(tickers, start="2008-01-01", end="2021-10-02"):
-    if sys.platform == "darwin":
-        path = '../../data/return_data_stable.csv'
-    else:
-        path = r'..\..\data\return_data_stable.csv'
+    path = str(os.path.join(os.path.dirname(__file__), '../../data/return_data_stable.csv'))
     return pd.read_csv(path, sep=";", index_col=0).loc[start:end, tickers]
 
 
