@@ -31,9 +31,10 @@ def download_return_data_old(tickers, start="2008-01-01", end="2021-10-02", save
 
 
 def download_return_data(tickers, start="2008-01-01", end="2021-10-02"):
-    #start = (dt.datetime.strptime(start, "%Y-%m-%d")+dt.timedelta(1)).strftime("%Y-%m-%d")
+    tickers = [ticker.replace("BZ=F", "BZF").replace("GC=F", "GCF") for ticker in tickers]
     path = str(os.path.join(os.path.dirname(__file__), '../../data/return_data_stable.csv'))
-    return pd.read_csv(path, sep=";", index_col=0).loc[start:end, tickers]
+    df = pd.read_csv(path, sep=";", index_col=0).loc[start:end, tickers].rename(columns={'BZF': 'BZ=F', 'GCF': 'GC=F'})
+    return df
 
 
 def remove_Omega_timestamp(Omega_ts):
@@ -51,6 +52,7 @@ def fit_garch_model(tickers, len_out_of_sample=0, ugarch_model="sGARCH", garch_o
     ugarch_model: One of "sGARCH", "gjrGARCH", not implemented: "eGARCH"
     garch_order: Default: (1, 1)
     """
+    tickers = [ticker.replace("BZ=F", "BZF").replace("GC=F", "GCF") for ticker in tickers]
     assert (ugarch_model in ("sGARCH", "gjrGARCH"))
     tickers = StrVector(tickers)
     garch_order = IntVector(garch_order)
