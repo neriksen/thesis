@@ -48,6 +48,11 @@ def main_loop(out_of_sample_returns, in_sample_returns, sigmas, epsilons, Qbar, 
         Omega_t_plus_1 = calc_Omega_t_plus_1(Var_t_plus_1=Var_t_plus_1, Gamma_t_plus_1=Gamma_t_plus_1)
         assert np.allclose(np.diag(Omega_t_plus_1), np.ravel(s_t_Sq_plus_1), rtol=1e-3)
 
+        # 9. Regularize estimate by 50%
+        regularizer = 0.5
+        ones = np.identity(len(Omega_t_plus_1))
+        Omega_t_plus_1 = ones * regularizer + Omega_t_plus_1 * (1 - regularizer)
+
         # Storing Omega_t and sigmas
         Omega_ts.append(Omega_t_plus_1)
         sigmas = np.append(sigmas, np.reshape(s_t_Sq_plus_1, (1, p)), axis=0)
