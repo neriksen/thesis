@@ -23,5 +23,5 @@ Sim_mgarch <- function(tickers, len_out_of_sample, ugarch_model, ugarch_dist_mod
 
     sim <- dccsim(fit1, n.sim = 2000, n.start = 1000, m.sim = 1, startMethod = c("unconditional" ))
     
-    return(list(coef(fit1), fitted(dccsim), sigma(dccsim)))
+    return(list(coef(fit1), fitted(sim), sigma(sim)))
 }
