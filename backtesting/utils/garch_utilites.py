@@ -84,16 +84,22 @@ def values_from_last_period(epsilons, sigmas):
 
 
 def calc_Qbar(epsilons, sigmas):
-    eta = np.empty(epsilons.shape)
-    p = np.size(epsilons, 1)
-    for i, (epsilon_t, sigma_t) in enumerate(zip(epsilons, sigmas)):
-        epsilon_t = np.reshape(epsilon_t, (p, 1))
-        Var_t, Var_t_inv = calc_Var_t(sigma_t)
-        eta_dot = dot(Var_t_inv, epsilon_t).T
-        eta[i] = eta_dot
+#the commented out code is similar to just getting the correlation matrix from python
 
-    #Qbar = 1 / len(epsilons) * sum([dot(np.reshape(eta, (p, 1)), np.reshape(eta, (1, p))) for eta in eta])
+#    eta = np.empty(epsilons.shape)
+#    p = np.size(epsilons, 1)
+#    for i, (epsilon_t, sigma_t) in enumerate(zip(epsilons, sigmas)):
+#        epsilon_t = np.reshape(epsilon_t, (p, 1))
+#        Var_t, Var_t_inv = calc_Var_t(sigma_t)
+#        eta_dot = dot(Var_t_inv, epsilon_t).T
+#        eta[i] = eta_dot
+#
+#    Qbar = 1 / len(epsilons) * sum([dot(np.reshape(eta, (p, 1)), np.reshape(eta, (1, p))) for eta in eta])
+
+    #Calculating Qbar as the correlation matrix of the residuals which is theoretically identical to 1/T\sum(\eta\eta')
+
     Qbar=pd.DataFrame(epsilons).corr().values
+
     # Regularize Qbar estimate by 50%
     regularizer = 0.5
     ones = np.identity(len(Qbar))
