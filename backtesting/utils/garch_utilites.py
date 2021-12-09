@@ -99,11 +99,8 @@ def calc_Qbar(epsilons, sigmas, **kw):
 
     # Regularize Qbar estimate by 50%
     regularizer = kw.get("regularizer", 0.5)
-    #regularizer = 0.5
-    #ones = np.identity(len(Qbar))
-    #Qbar = ones * regularizer + Qbar * (1 - regularizer)
-    regularized_target = (np.diag(np.diag(Qbar)) + np.zeros(Qbar.shape))
-    Qbar =  regularized_target * regularizer + (1 - regularizer) * Qbar
+    ones = np.identity(len(Qbar))
+    Qbar = ones * regularizer + Qbar * (1 - regularizer)
     assert np.size(Qbar, 1) == np.size(epsilons, 1)
     return Qbar
 
