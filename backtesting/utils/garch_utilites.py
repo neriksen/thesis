@@ -92,8 +92,8 @@ def calc_Qbar(epsilons, sigmas):
         eta_dot = dot(Var_t_inv, epsilon_t).T
         eta[i] = eta_dot
 
-    Qbar = 1 / len(epsilons) * sum([dot(np.reshape(eta, (p, 1)), np.reshape(eta, (1, p))) for eta in eta])
-
+    #Qbar = 1 / len(epsilons) * sum([dot(np.reshape(eta, (p, 1)), np.reshape(eta, (1, p))) for eta in eta])
+    Qbar=pd.DataFrame(epsilons).corr().values
     # Regularize Qbar estimate by 50%
     regularizer = 0.5
     ones = np.identity(len(Qbar))
