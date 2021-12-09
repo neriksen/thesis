@@ -210,7 +210,7 @@ def calc_weights_garch_no_trading_cost(Omega_ts):
 
 
 def calc_Omega_ts(out_of_sample_returns, in_sample_returns, in_sample_sigmas, in_sample_residuals, **kw):
-    Qbar = gu.calc_Qbar(in_sample_residuals, in_sample_sigmas)
+    Qbar = gu.calc_Qbar(in_sample_residuals, in_sample_sigmas, **kw)
     Q_t = Qbar      # Qbar is the same as Q_t at the start of the out-of-sample period
 
     Omega_ts = gu.main_loop(out_of_sample_returns=out_of_sample_returns, in_sample_returns=in_sample_returns,

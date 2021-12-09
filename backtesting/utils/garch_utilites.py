@@ -83,7 +83,7 @@ def values_from_last_period(epsilons, sigmas):
     return e_t, e_t_Sq, s_t_Sq
 
 
-def calc_Qbar(epsilons, sigmas):
+def calc_Qbar(epsilons, sigmas, **kw):
     eta = np.empty(epsilons.shape)
     p = np.size(epsilons, 1)
     for i, (epsilon_t, sigma_t) in enumerate(zip(epsilons, sigmas)):
@@ -98,9 +98,12 @@ def calc_Qbar(epsilons, sigmas):
     #Qbar=pd.DataFrame(epsilons).corr().values
 
     # Regularize Qbar estimate by 50%
-    regularizer = 0.5
-    ones = np.identity(len(Qbar))
-    Qbar = ones * regularizer + Qbar * (1 - regularizer)
+    regularizer = kw.get("regularizer", 0.5)
+    #regularizer = 0.5
+    #ones = np.identity(len(Qbar))
+    #Qbar = ones * regularizer + Qbar * (1 - regularizer)
+    regularized_target = (np.diag(np.diag(Qbar)) + np.zeros(Qbar.shape))
+    Qbar =  regularized_target * regularizer + (1 - regularizer) * Qbar
     assert np.size(Qbar, 1) == np.size(epsilons, 1)
     return Qbar
 
