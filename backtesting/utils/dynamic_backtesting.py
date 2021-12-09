@@ -48,7 +48,7 @@ def split_sample(return_data, number_of_out_of_sample_days):
 
 
 def fit_garch_model(tickers, len_out_of_sample=0, ugarch_model="sGARCH", garch_order=(1, 1), simulation=False,
-                    ugarch_dist_model="std"):
+                    ugarch_dist_model="std",rseed=1):
     """
     ugarch_model: One of "sGARCH", "gjrGARCH", not implemented: "eGARCH"
     garch_order: Default: (1, 1)
@@ -66,7 +66,7 @@ def fit_garch_model(tickers, len_out_of_sample=0, ugarch_model="sGARCH", garch_o
         # Load the function we have defined in R.
         sim_mgarch_r = ro.globalenv['Sim_mgarch']
         # Fit the MGARCH model and receive the result
-        coef, sim_returns, sigmas = sim_mgarch_r(tickers, len_out_of_sample, ugarch_model, ugarch_dist_model, garch_order)
+        coef, sim_returns, sigmas = sim_mgarch_r(tickers, len_out_of_sample, ugarch_model, ugarch_dist_model, garch_order,rseed)
         return coef, sim_returns, sigmas
     else:
         r['source'](str(os.path.join(os.path.dirname(__file__), '../fitting_mgarch.R')))
@@ -78,7 +78,7 @@ def fit_garch_model(tickers, len_out_of_sample=0, ugarch_model="sGARCH", garch_o
         return coef, residuals, sigmas
 
 
-def parse_garch_coef(coef, p, model_type):
+def parse_garch_coef(coef, p, model_type, ugarch_dist_model='std'):
     """
     Possible modeltypes: sGARCH11, sGARCH10, gjrGARCH11, not implemented: eGARCH11
     """
@@ -228,7 +228,7 @@ def unconditional_weights(tickers, start="2008-01-01", end="2021-10-02", number_
     return weights
 
 
-def split_fit_parse(tickers, start, end, number_of_out_of_sample_days, model_type, simulation=False, ugarch_dist_model="std"):
+def split_fit_parse(tickers, start, end, number_of_out_of_sample_days, model_type, simulation=False, ugarch_dist_model="std",rseed=1):
     print(tickers)
     garch_type = model_type[:-2]
     garch_order = IntVector((model_type[-2], model_type[-1]))
@@ -244,11 +244,11 @@ def split_fit_parse(tickers, start, end, number_of_out_of_sample_days, model_typ
     if simulation:
         coef, simulated_returns, sigmas = fit_garch_model(tickers=tickers, len_out_of_sample=number_of_out_of_sample_days,
                                               ugarch_model=garch_type, garch_order=garch_order, simulation=True,
-                                                          ugarch_dist_model=ugarch_dist_model)
+                                                          ugarch_dist_model=ugarch_dist_model,rseed=rseed)
     else:
         coef, residuals, sigmas = fit_garch_model(tickers=tickers, len_out_of_sample=number_of_out_of_sample_days,
                                               ugarch_model=garch_type, garch_order=garch_order, simulation=False,
-                                                  ugarch_dist_model=ugarch_dist_model)
+                                                  ugarch_dist_model=ugarch_dist_model,rseed=rseed)
 
     # Parse variables
     params_dict = parse_garch_coef(coef=coef, p=p, model_type=model_type)
@@ -261,7 +261,7 @@ def split_fit_parse(tickers, start, end, number_of_out_of_sample_days, model_typ
 
 
 def garch_no_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_of_out_of_sample_days=250*4,
-                          model_type="sGARCH11", simulation=False, ugarch_dist_model="std"):
+                          model_type="sGARCH11", simulation=False, ugarch_dist_model="std",rseed=1):
     """
     tickers: ["ticker", "ticker", ..., "ticker"]
     start: "yyyy-m-d"
@@ -270,7 +270,7 @@ def garch_no_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_
     """
     assert (model_type in ("sGARCH11", "sGARCH10", "gjrGARCH11"))
     out_of_sample, in_sample, sigmas, residuals, params_dict = split_fit_parse(tickers, start, end,
-                                                                               number_of_out_of_sample_days, model_type, simulation=simulation, ugarch_dist_model=ugarch_dist_model)
+                                                                               number_of_out_of_sample_days, model_type, simulation=simulation, ugarch_dist_model=ugarch_dist_model,rseed=rseed)
 
     Omega_ts = calc_Omega_ts(out_of_sample_returns=out_of_sample, in_sample_returns=in_sample,
                              in_sample_sigmas=sigmas, in_sample_residuals=residuals, **params_dict)
@@ -283,7 +283,7 @@ def garch_no_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_
 
 
 def garch_with_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_of_out_of_sample_days=250*4,
-                          model_type="sGARCH11", tuning_gamma_D=None, simulation=False, ugarch_dist_model="std"):
+                          model_type="sGARCH11", tuning_gamma_D=None, simulation=False, ugarch_dist_model="std",rseed=1):
     """
     tickers: ["ticker", "ticker", ..., "ticker"]
     start: "yyyy-m-d"
@@ -292,7 +292,7 @@ def garch_with_trading_cost(tickers, start="2008-01-01", end="2021-10-02", numbe
     """
     assert (model_type in ("sGARCH11", "sGARCH10", "gjrGARCH11"))
     out_of_sample, in_sample, sigmas, residuals, params_dict = split_fit_parse(tickers, start, end,
-                                                                               number_of_out_of_sample_days, model_type, simulation=simulation, ugarch_dist_model=ugarch_dist_model)
+                                                                               number_of_out_of_sample_days, model_type, simulation=simulation, ugarch_dist_model=ugarch_dist_model,rseed=rseed)
 
     Omega_ts = calc_Omega_ts(out_of_sample_returns=out_of_sample, in_sample_returns=in_sample,
                              in_sample_sigmas=sigmas, in_sample_residuals=residuals, **params_dict)
@@ -323,7 +323,7 @@ def multiprocessing_helper(gamma_D_tuning, Omega_ts, portfolio_value, tickers, o
 
 
 def test_gamma_D_params(tickers, start="2008-01-01", end="2021-10-02", number_of_out_of_sample_days=250*4,
-                          model_type="sGARCH11", portfolio_value=1e9, gamma_start=1e-8, gamma_end=1e-2, gamma_num=30):
+                          model_type="sGARCH11", portfolio_value=1e9, gamma_start=1e-8, gamma_end=1e-2, gamma_num=30, simulation=False, ugarch_dist_model="std",rseed=1):
 
     gamma_Ds_tuning = np.geomspace(gamma_start, gamma_end, gamma_num)
     """
@@ -335,7 +335,7 @@ def test_gamma_D_params(tickers, start="2008-01-01", end="2021-10-02", number_of
     assert (model_type in ("sGARCH11", "sGARCH10", "gjrGARCH11"))
 
     out_of_sample, in_sample, sigmas, residuals, params_dict = split_fit_parse(tickers, start, end,
-                                                                               number_of_out_of_sample_days, model_type)
+                                                                               number_of_out_of_sample_days, model_type, simulation=simulation, ugarch_dist_model=ugarch_dist_model,rseed=rseed)
 
     Omega_ts = calc_Omega_ts(out_of_sample_returns=out_of_sample, in_sample_returns=in_sample,
                              in_sample_sigmas=sigmas, in_sample_residuals=residuals, **params_dict)

@@ -30,14 +30,14 @@ def calc_transaction_costs(weights: pd.DataFrame, returns, Omega_ts, portfolio_v
     assert len(weights) == len(returns)+1
     assert weights.iloc[[1]].index == returns.iloc[[0]].index
     p = weights.shape[1]
-    gamma_D = calibrate_trading_costs.get_gamma_D("mean")
+    gamma_D = calibrate_trading_costs.get_gamma_D("median")
     TC = np.zeros((len(returns)))
     avg_price = calibrate_trading_costs.asset_lookup(list(returns.columns), col_lookup="Avg price")
 
     for t, (v_t, Omega_t, r_t, r_t_1) in enumerate(zip(weights.iterrows(), Omega_ts, returns.shift(1, fill_value=0).iterrows(),
                                                        returns.shift(2, fill_value=0).iterrows())):
 
-        Omega_value = Omega_t[1]/10000
+        Omega_value = Omega_t[1]
 
         v_t_value = np.reshape(v_t[1].values, (p, 1))
         r_t_value = np.reshape(r_t[1].values, (p, 1))

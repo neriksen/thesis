@@ -5,7 +5,7 @@ suppressMessages(library(tidyverse))
 suppressMessages(library(here))
 
 
-Sim_mgarch <- function(tickers, len_out_of_sample, ugarch_model, ugarch_dist_model, garchOrder){
+Sim_mgarch <- function(tickers, len_out_of_sample, ugarch_model, ugarch_dist_model, garchOrder,rseed){
 
     full_sample <- read.csv(paste(here(),"/data/return_data_stable.csv", sep=""), sep=";") %>% select(-Date) %>% select(one_of(tickers))
     len_in_sample <- nrow(full_sample) - len_out_of_sample
@@ -21,7 +21,7 @@ Sim_mgarch <- function(tickers, len_out_of_sample, ugarch_model, ugarch_dist_mod
     fit1 = dccfit(spec1, data = in_sample, fit.control = list(eval.se = TRUE), fit = multf, cluster = cl)   
     stopCluster(cl)
 
-    sim <- dccsim(fit1, n.sim = len_out_of_sample, n.start = 1000, m.sim = 1, startMethod = c("unconditional" ))
+    sim <- dccsim(fit1, n.sim = len_out_of_sample, n.start = 1000, m.sim = 1, startMethod = c("unconditional" ),rseed=rseed)
     
     return(list(coef(fit1), fitted(sim), sigma(sim)))
 }
