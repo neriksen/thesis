@@ -34,6 +34,7 @@ def download_return_data(tickers, start="2008-01-01", end="2021-10-02"):
     tickers = [ticker.replace("BZ=F", "BZF").replace("GC=F", "GCF") for ticker in tickers]
     path = str(os.path.join(os.path.dirname(__file__), '../../data/return_data_stable.csv'))
     df = pd.read_csv(path, sep=";", index_col=0).loc[start:end, tickers].rename(columns={'BZF': 'BZ=F', 'GCF': 'GC=F'})
+    df.index = pd.to_datetime(df.index)
     return df
 
 
@@ -198,9 +199,12 @@ def calc_weights_garch_with_trading_cost(Omega_t_plus1s, out_of_sample_returns_p
     return v_ts , aim_ts, modifiers
 
 
-def calc_weights_garch_no_trading_cost(Omega_ts):
+def calc_weights_garch_no_trading_cost(Omega_ts, remove_timestamp=True):
     assert isinstance(Omega_ts, (list, np.ndarray))
-    Omega_values = remove_Omega_timestamp(Omega_ts)
+    if remove_timestamp:
+        Omega_values = remove_Omega_timestamp(Omega_ts)
+    else:
+        Omega_values = Omega_ts
     p = len(Omega_values[0])
     ones = np.ones((p, 1))
     v_t = [np.ravel(divide(dot(inv(Omega_values[0]), ones), mdot([ones.T, inv(Omega_values[0]), ones])))] # Add first weight twice to adhere to standard in garch with trading cost
@@ -371,14 +375,14 @@ if __name__ == '__main__':
     #                                                                    portfolio_value=1e9,
     #                              gamma_start=1e-6, gamma_end=1e-2, gamma_num=150)
     #                               #gamma_start=1e-3, gamma_end=1e10, gamma_num=300)
-    v_t_s, out_of_sample, in_sample, Omega_ts = garch_no_trading_cost(['EEM', 'IVV', 'IEV', 'IXN', 'IYR', 'IXG', 'EXI'], model_type="sGARCH11", simulation=True, ugarch_dist_model="std")
-    #v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['EEM', 'IVV', 'IEV', 'IXN', 'IYR', 'IXG', 'EXI', 'GC=F', 'BZ=F', 'HYG', 'TLT'], number_of_out_of_sample_days=1000, model_type="sGARCH10", tuning_gamma_D=1.3e-5)
+    v_t_s, out_of_sample, in_sample, Omega_ts = garch_no_trading_cost(['IVV', 'BZ=F', 'TLT'], model_type="sGARCH10")
+    #v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['IVV', 'BZ=F', 'TLT'], number_of_out_of_sample_days=1000, model_type="sGARCH11")
     #v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['EEM', 'IVV', 'IEV', 'IXN', 'IYR', 'IXG', 'EXI'], number_of_out_of_sample_days=1000, model_type="sGARCH10", tuning_gamma_D=1.3e-5)
     #v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['EEM', 'IVV', 'TLT'], model_type="sGARCH11", tuning_gamma_D=1e-4)
 
     sharpe = False
     if sharpe == False:
-        cum_returns, perf_table = performance_table(v_t_s, out_of_sample, Omega_ts, portfolio_value=portfolio_value)
+        cum_returns, perf_table = performance_table(v_t_s, out_of_sample, Omega_ts, portfolio_value=portfolio_value, strategy_name="GARCH(1,1) no regularization")
         print(perf_table)
         plt.plot(cum_returns)
         #plt.plot(v_t_s)
