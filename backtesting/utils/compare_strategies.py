@@ -59,7 +59,7 @@ def calc_transaction_costs(weights: pd.DataFrame, returns, Omega_ts, portfolio_v
     return TC
 
 
-def performance_table(weights, returns_pct: pd.DataFrame, Omega_ts, portfolio_value=1e9) -> Tuple[pd.DataFrame, Any]:
+def performance_table(weights, returns_pct: pd.DataFrame, Omega_ts, portfolio_value=1e9, strategy_name="GARCH") -> Tuple[pd.DataFrame, Any]:
     """
     Function assumes weights start in period T (last in-sample period)
     and returns_pct start in period T+1 (first out-of-sample period)
@@ -76,11 +76,11 @@ def performance_table(weights, returns_pct: pd.DataFrame, Omega_ts, portfolio_va
     # GARCH return
     returns = returns_pct.divide(100)
     portfolio_returns = delayed_weights.multiply(returns).sum(axis=1).to_frame()
-    portfolio_returns.columns = ['GARCH']
+    portfolio_returns.columns = [strategy_name]
 
     # Calculate returns net transaction costs
     TC_garch = calc_transaction_costs(weights, returns, Omega_ts, portfolio_value)
-    portfolio_returns['GARCH TC'] = portfolio_returns['GARCH']-TC_garch
+    portfolio_returns[f'{strategy_name} TC'] = portfolio_returns[strategy_name]-TC_garch
 
     cum_portfolio_returns = portfolio_returns.add(1).cumprod()
 
@@ -111,9 +111,6 @@ def performance_table(weights, returns_pct: pd.DataFrame, Omega_ts, portfolio_va
     cum_portfolio_returns['BnH'] = BnH_returns.add(1).cumprod()
     cum_portfolio_returns['BnH TC'] = cum_portfolio_returns['BnH']
 
-    # Formatting
-    #cum_portfolio_returns.columns = ["GARCH", "GARCH TC", "Equal weight", "BnH"]
-
     # Normalize returns to begin at 1
     cum_portfolio_returns = cum_portfolio_returns.divide(cum_portfolio_returns.iloc[0])
     cum_portfolio_returns.index = pd.to_datetime(cum_portfolio_returns.index)
@@ -128,7 +125,7 @@ def performance_table(weights, returns_pct: pd.DataFrame, Omega_ts, portfolio_va
     ann_return = ((last_gross_return) ** (250/num_non_nan_periods))-1
     sharpe = ann_return.divide(std)
 
-    new_order = ['GARCH', 'Equal_weight', 'BnH', 'GARCH TC', 'Equal_weight TC', 'BnH TC']
+    new_order = [strategy_name, 'Equal_weight', 'BnH', f'{strategy_name} TC', 'Equal_weight TC', 'BnH TC']
     performance_table = pd.DataFrame([std, ann_return, sharpe])[new_order].transpose()
     performance_table.columns = ["Ann. standard deviation", "Ann. return", "Ann. Sharpe ratio"]
     return cum_portfolio_returns, performance_table
