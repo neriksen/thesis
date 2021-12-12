@@ -156,11 +156,18 @@ def calc_weights_loop(Avv, Av1, Omega_t_plus1s, tuning_gamma_D, out_of_sample_re
             # Because we don't have any return for period T since the portfolio is first established at end of day
             # on the first day the portfolio is constructed
             r_t_value = np.zeros((p, 1))
+            aim_t = mdot([inv(Avv), Av1, ones])
+            aim_t = aim_t / np.sum(aim_t)
 
         # First weight calculated here is for period T+1, so what the investor rebalances to
         # at the end of day T+1, ie. the first day where the strategy is live
-        aim_t = mdot([inv(Avv), Av1, ones])
-        aim_t = aim_t/np.sum(aim_t)
+
+        potential_aim = mdot([inv(Avv), Av1, ones])
+        if t != 0 and np.abs(np.sum(potential_aim)) < 0.001:
+            print(f'Low portfolio weights sum detected of {np.abs(np.sum(potential_aim))}')
+        else:
+            aim_t = potential_aim
+            aim_t = aim_t / np.sum(aim_t)
 
         v_t_1_mod = np.divide(np.multiply(v_t_1, 1+r_t_value), 1+dot(v_t_1.T, r_t_value))
         modifier = mdot([inv(tuning_gamma_D*Omega_value), Avv, (v_t_1_mod-aim_t)])
