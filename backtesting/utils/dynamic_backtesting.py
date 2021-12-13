@@ -12,17 +12,12 @@ from rpy2.robjects import pandas2ri
 from rpy2.robjects import IntVector
 from rpy2.robjects import StrVector
 from compare_strategies import performance_table
+from compare_strategies import regularize_corr
 from calibrate_trading_costs import get_gamma_D
 pandas2ri.activate()
 import garch_utilites as gu
 from multiprocessing import Pool
-import datetime as dt
 import yfinance
-
-
-def regularize_corr(regularizer, covar):
-    target = np.zeros(len(covar))+np.diag(np.diag(covar))
-    return target * regularizer + covar * (1 - regularizer)
 
 
 def download_return_data_old(tickers, start="2008-01-01", end="2021-10-02", save_to_csv=True):

@@ -4,6 +4,13 @@ import calibrate_trading_costs
 from typing import Tuple, Any
 from numpy.linalg import multi_dot as mdot
 from numpy import dot
+from numpy.linalg import inv
+from numpy import divide
+
+
+def regularize_corr(regularizer, covar):
+    target = np.zeros(len(covar))+np.diag(np.diag(covar))
+    return target * regularizer + covar * (1 - regularizer)
 
 
 def Lambda(Omega, gamma_D):
@@ -59,7 +66,7 @@ def calc_transaction_costs(weights: pd.DataFrame, returns, Omega_ts, portfolio_v
     return TC
 
 
-def performance_table(weights, returns_pct: pd.DataFrame, Omega_ts, portfolio_value=1e9, strategy_name="GARCH") -> Tuple[pd.DataFrame, Any]:
+def performance_table(weights, returns_pct: pd.DataFrame, Omega_ts, in_sample_returns, portfolio_value=1e9, strategy_name="GARCH") -> Tuple[pd.DataFrame, Any]:
     """
     Function assumes weights start in period T (last in-sample period)
     and returns_pct start in period T+1 (first out-of-sample period)
@@ -92,12 +99,14 @@ def performance_table(weights, returns_pct: pd.DataFrame, Omega_ts, portfolio_va
     cum_portfolio_returns['Equal_weight TC'] = returns.mean(axis=1).sub(TC_Equal_weight).add(1).cumprod()
 
 
-    # GARCH is first weight in Buy and hold  (BnH)
+    # Sample covar min var is first weight in Buy and hold  (BnH)
+    initial_covar = regularize_corr(0.5, in_sample_returns.cov().values)
+    ones = np.ones((p, 1))
     # Since turnover = |v_t - v_{t-1}*(1+r_t)|, then v_{t-1} = v_t/(1+r_t) when aiming for turnover = 0.
-    BnH_weights = [weights.iloc[0].values]
+    BnH_weights = [np.ravel(divide(dot(inv(initial_covar), ones), mdot([ones.T, inv(initial_covar), ones])))]
     for t, (_, _return) in enumerate(returns.shift(1, fill_value=0).iterrows()):
         if t == 0:
-            BnH_weights.append(weights.iloc[0].values)
+            BnH_weights.append(BnH_weights[0])
         else:
             _return = np.reshape(_return.values, (p, 1))
             v_t_1 = np.reshape(BnH_weights[-1], (p, 1))
