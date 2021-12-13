@@ -287,6 +287,11 @@ def garch_no_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_
 
     Omega_ts = calc_Omega_ts(out_of_sample_returns=out_of_sample, in_sample_returns=in_sample,
                              in_sample_sigmas=sigmas, in_sample_residuals=residuals, **params_dict)
+
+    # Sample covar used for Buy-and-hold strategy. Regularized 50%
+    initial_covar = regularize_corr(0.5, in_sample.cov().values)
+    Omega_ts[0][1] = initial_covar
+
     # Generating weights
     v_t = calc_weights_garch_no_trading_cost(Omega_ts)
     weight_index = in_sample.index[[-1]].union(out_of_sample.index)
@@ -314,7 +319,7 @@ def garch_with_trading_cost(tickers, start="2008-01-01", end="2021-10-02", numbe
     initial_covar = regularize_corr(0.5, in_sample.cov().values)
 
     # Generating weights
-    v_t,_,_ = calc_weights_garch_with_trading_cost(Omega_ts, out_of_sample,  initial_covar=initial_covar, tuning_gamma_D=tuning_gamma_D)
+    v_t,_,_ = calc_weights_garch_with_trading_cost(Omega_ts, out_of_sample, initial_covar=initial_covar, tuning_gamma_D=tuning_gamma_D)
     # Construct index for weights that start in period T (last in-sample period)
     weight_index = in_sample.index[[-1]].union(out_of_sample.index)
     v_t = pd.DataFrame(v_t, columns=tickers, index=weight_index)
