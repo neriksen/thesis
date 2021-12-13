@@ -20,6 +20,11 @@ import datetime as dt
 import yfinance
 
 
+def regularize_corr(regularizer, covar):
+    target = np.zeros(len(covar))+np.diag(np.diag(covar))
+    return target * regularizer + covar * (1 - regularizer)
+
+
 def download_return_data_old(tickers, start="2008-01-01", end="2021-10-02", save_to_csv=True):
     return_data = yfinance.download(tickers, start=start, end=end)['Adj Close']
     return_data = return_data/return_data.iloc[0]
@@ -49,7 +54,7 @@ def split_sample(return_data, number_of_out_of_sample_days):
 
 
 def fit_garch_model(tickers, len_out_of_sample=0, ugarch_model="sGARCH", garch_order=(1, 1), simulation=False,
-                    ugarch_dist_model="std",rseed=1):
+                    ugarch_dist_model="std", rseed=1):
     """
     ugarch_model: One of "sGARCH", "gjrGARCH", not implemented: "eGARCH"
     garch_order: Default: (1, 1)
@@ -132,7 +137,7 @@ def numerical_solver_multi(Omega_t_plus_1, gamma_D):
     return Avv, Av1
 
 
-def calc_weights_loop(Avv, Av1, Omega_t_plus1s, tuning_gamma_D, out_of_sample_returns_pct):
+def calc_weights_loop(Avv, Av1, Omega_t_plus1s, tuning_gamma_D, out_of_sample_returns_pct, initial_covar):
     v_ts = []
     aim_ts = []
     modifiers = []
@@ -140,8 +145,10 @@ def calc_weights_loop(Avv, Av1, Omega_t_plus1s, tuning_gamma_D, out_of_sample_re
     ones = np.ones((p, 1))
     out_of_sample_returns = out_of_sample_returns_pct.divide(100)
 
-    # Let the first weight in period T (last out-of-sample period) be similar to garch_no_trading costs:
-    v_1 = divide(dot(inv(Omega_t_plus1s[0][1]), ones), mdot([ones.T, inv(Omega_t_plus1s[0][1]), ones]))
+    # Let the first weight in period T (last out-of-sample period) be regularized sample covar min var port:
+    assert isinstance(initial_covar, (list, np.ndarray))
+    v_1 = divide(dot(inv(initial_covar), ones), mdot([ones.T, inv(initial_covar), ones]))
+
     v_ts.append(np.ravel(v_1))
     v_t_1 = v_1
     for t, (Omega, Avv, Av1) in enumerate(zip(Omega_t_plus1s, Avv, Av1)):
@@ -181,7 +188,7 @@ def calc_weights_loop(Avv, Av1, Omega_t_plus1s, tuning_gamma_D, out_of_sample_re
     return v_ts, aim_ts, modifiers
 
 
-def calc_weights_garch_with_trading_cost(Omega_t_plus1s, out_of_sample_returns_pct, tuning_gamma_D=None):
+def calc_weights_garch_with_trading_cost(Omega_t_plus1s, out_of_sample_returns_pct, initial_covar, tuning_gamma_D=None):
     # T is last period of in-sample time span
     # Omega_t_plus1s first value is T-measurable, and is a T+1 forecast
     # out_of_sample_returns_pct first value is T+1-measurable
@@ -201,7 +208,7 @@ def calc_weights_garch_with_trading_cost(Omega_t_plus1s, out_of_sample_returns_p
 
     Avv = [x[0] for x in res]
     Av1 = [x[1] for x in res]
-    v_ts , aim_ts, modifiers = calc_weights_loop(Avv, Av1, Omega_t_plus1s, tuning_gamma_D, out_of_sample_returns_pct)
+    v_ts , aim_ts, modifiers = calc_weights_loop(Avv, Av1, Omega_t_plus1s, tuning_gamma_D, out_of_sample_returns_pct, initial_covar)
 
     return v_ts , aim_ts, modifiers
 
@@ -294,7 +301,7 @@ def garch_no_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_
 
 
 def garch_with_trading_cost(tickers, start="2008-01-01", end="2021-10-02", number_of_out_of_sample_days=250*4,
-                          model_type="sGARCH11", tuning_gamma_D=None, simulation=False, ugarch_dist_model="std",rseed=1):
+                          model_type="sGARCH11", tuning_gamma_D=None, simulation=False, ugarch_dist_model="std", rseed=1):
     """
     tickers: ["ticker", "ticker", ..., "ticker"]
     start: "yyyy-m-d"
@@ -307,8 +314,12 @@ def garch_with_trading_cost(tickers, start="2008-01-01", end="2021-10-02", numbe
 
     Omega_ts = calc_Omega_ts(out_of_sample_returns=out_of_sample, in_sample_returns=in_sample,
                              in_sample_sigmas=sigmas, in_sample_residuals=residuals, **params_dict)
+
+    # Sample covar used for Buy-and-hold strategy. Regularized 50%
+    initial_covar = regularize_corr(0.5, in_sample.cov().values)
+
     # Generating weights
-    v_t,_,_ = calc_weights_garch_with_trading_cost(Omega_ts, out_of_sample, tuning_gamma_D=tuning_gamma_D)
+    v_t,_,_ = calc_weights_garch_with_trading_cost(Omega_ts, out_of_sample,  initial_covar=initial_covar, tuning_gamma_D=tuning_gamma_D)
     # Construct index for weights that start in period T (last in-sample period)
     weight_index = in_sample.index[[-1]].union(out_of_sample.index)
     v_t = pd.DataFrame(v_t, columns=tickers, index=weight_index)
@@ -317,7 +328,11 @@ def garch_with_trading_cost(tickers, start="2008-01-01", end="2021-10-02", numbe
 
 
 def multiprocessing_helper(gamma_D_tuning, Omega_ts, portfolio_value, tickers, out_of_sample, in_sample, Avv, Av1):
-    v_t,_,_ = calc_weights_loop(Avv=Avv, Av1=Av1, Omega_t_plus1s=Omega_ts, tuning_gamma_D=gamma_D_tuning, out_of_sample_returns_pct=out_of_sample)
+    # Sample covar used for Buy-and-hold strategy. Regularized 50%
+    initial_covar = regularize_corr(0.5, in_sample.cov().values)
+
+    v_t,_,_ = calc_weights_loop(Avv=Avv, Av1=Av1, Omega_t_plus1s=Omega_ts, tuning_gamma_D=gamma_D_tuning,
+                                out_of_sample_returns_pct=out_of_sample, initial_covar=initial_covar)
 
     weight_index = in_sample.index[[-1]].union(out_of_sample.index)
     v_t = pd.DataFrame(v_t, columns=tickers, index=weight_index)
@@ -373,28 +388,22 @@ def test_gamma_D_params(tickers, start="2008-01-01", end="2021-10-02", number_of
 
 if __name__ == '__main__':
     portfolio_value = 1e9
-    #sharpes, std = test_gamma_D_params(['HYG','TLT']
-    #                             , number_of_out_of_sample_days=1000,
-    #                             gamma_start=3e-5, gamma_end=1e-2, gamma_num=100)
+    sharpes, std = test_gamma_D_params(['HYG','TLT'], model_type='sGARCH10'
+                                 , number_of_out_of_sample_days=1000,
+                                 gamma_start=3e-5, gamma_end=0.5, gamma_num=50)
     #sharpes, std = test_gamma_D_params(['EEM', 'IVV', 'IEV', 'IXN', 'IYR', 'IXG', 'EXI', 'GCF', 'BZF', 'HYG', 'TLT']
     # sharpes, std = test_gamma_D_params(['EEM', 'IVV', 'IEV', 'IXN', 'TLT'],
     #                                    number_of_out_of_sample_days=1000, model_type="sGARCH10",
     #                                                                    portfolio_value=1e9,
     #                              gamma_start=1e-6, gamma_end=1e-2, gamma_num=150)
     #                               #gamma_start=1e-3, gamma_end=1e10, gamma_num=300)
-    v_t_s, out_of_sample, in_sample, Omega_ts = garch_no_trading_cost(['IVV', 'BZ=F', 'TLT'], model_type="sGARCH10")
+    #v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['IVV', 'TLT'], model_type="gjrGARCH11")
     #v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['IVV', 'BZ=F', 'TLT'], number_of_out_of_sample_days=1000, model_type="sGARCH11")
-    #v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['EEM', 'IVV', 'IEV', 'IXN', 'IYR', 'IXG', 'EXI'], number_of_out_of_sample_days=1000, model_type="sGARCH10", tuning_gamma_D=1.3e-5)
+    #v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['EEM', 'IVV', 'IEV', 'IXN', 'IYR', 'IXG', 'EXI', 'GCF', 'BZF', 'HYG', 'TLT'], model_type="sGARCH11", tuning_gamma_D=1.3e-5)
     #v_t_s, out_of_sample, in_sample, Omega_ts = garch_with_trading_cost(['EEM', 'IVV', 'TLT'], model_type="sGARCH11", tuning_gamma_D=1e-4)
 
-    sharpe = False
-    if sharpe == False:
-        cum_returns, perf_table = performance_table(v_t_s, out_of_sample, Omega_ts, portfolio_value=portfolio_value, strategy_name="GARCH(1,1) no regularization")
-        print(perf_table)
-        plt.plot(cum_returns)
-        #plt.plot(v_t_s)
-        plt.show()
-    else:
+    sharpe = True
+    if sharpe:
         for sharpe in sharpes:
             print(sharpe)
         sharpes = pd.DataFrame(sharpes, columns=['gamma_D', 'GARCH TC', 'Equal_weight TC', 'BnH TC'])
@@ -405,4 +414,10 @@ if __name__ == '__main__':
         plt.plot(std)
         plt.xscale('log')
         plt.yscale('log')
+        plt.show()
+    else:
+        cum_returns, perf_table = performance_table(v_t_s, out_of_sample, Omega_ts, portfolio_value=portfolio_value, strategy_name="GARCH(1,1)")
+        print(perf_table)
+        plt.plot(cum_returns)
+        #plt.plot(v_t_s)
         plt.show()
