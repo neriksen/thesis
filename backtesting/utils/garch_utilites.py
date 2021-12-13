@@ -60,7 +60,7 @@ def main_loop(out_of_sample_returns, in_sample_returns, sigmas, epsilons, Qbar, 
 
     # Time index for Omega_ts is the same as returns out of sample
     # We define the timestamp as t+1 when Omega = Omega_{t+1|T}
-    Omega_ts = [(ind, Omega) for ind, Omega in zip(out_of_sample_returns.index, Omega_ts)]
+    Omega_ts = [[ind, Omega] for ind, Omega in zip(out_of_sample_returns.index, Omega_ts)]
 
     return Omega_ts
 
